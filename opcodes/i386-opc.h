@@ -111,6 +111,8 @@ enum
   CpuAVX512DQ,
   /* Intel AVX-512 BW Instructions support required.  */
   CpuAVX512BW,
+  /* Intel K1OM support required */
+  CpuK1OM,
   /* Intel IAMCU support required */
   CpuIAMCU,
   /* Xsave/xrstor New Instructions support required */
@@ -339,6 +341,7 @@ typedef union i386_cpu_flags
       unsigned int cpuavx512vl:1;
       unsigned int cpuavx512dq:1;
       unsigned int cpuavx512bw:1;
+      unsigned int cpuk1om:1;
       unsigned int cpuiamcu:1;
       unsigned int cpuxsave:1;
       unsigned int cpuxsaveopt:1;

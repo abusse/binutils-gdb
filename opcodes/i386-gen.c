@@ -46,7 +46,7 @@ typedef struct initializer
 static initializer cpu_flag_init[] =
 {
   { "CPU_UNKNOWN_FLAGS",
-    "~CpuIAMCU" },
+    "~(CpuIAMCU|CpuK1OM)" },
   { "CPU_GENERIC32_FLAGS",
     "Cpu186|Cpu286|Cpu386" },
   { "CPU_GENERIC64_FLAGS",
@@ -245,6 +245,8 @@ static initializer cpu_flag_init[] =
     "CPU_AVX512F_FLAGS|CpuAVX512_BF16" },
   { "CPU_AVX512_FP16_FLAGS",
     "CPU_AVX512BW_FLAGS|CpuAVX512_FP16" },
+  { "CPU_K1OM_FLAGS",
+    "~CpuIAMCU" },
   { "CPU_IAMCU_FLAGS",
     "Cpu186|Cpu286|Cpu386|Cpu486|Cpu586|CpuIAMCU" },
   { "CPU_ADX_FLAGS",
@@ -582,6 +584,7 @@ static bitfield cpu_flags[] =
   BITFIELD (CpuAVX512VL),
   BITFIELD (CpuAVX512DQ),
   BITFIELD (CpuAVX512BW),
+  BITFIELD (CpuK1OM),
   BITFIELD (CpuIAMCU),
   BITFIELD (CpuSSE4a),
   BITFIELD (Cpu3dnow),
