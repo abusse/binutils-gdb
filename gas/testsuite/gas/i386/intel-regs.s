@@ -59,3 +59,5 @@
 	mov	rax, r8
 ymm8:
 	jmp	ymm8
+zmm8:
+	jmp	zmm8

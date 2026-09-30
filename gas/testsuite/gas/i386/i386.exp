@@ -1137,6 +1137,13 @@ if [expr ([istarget "i*86-*-*"] || [istarget "x86_64-*-*"]) && [gas_64_check]] t
     run_dump_test "x86-64-lfence-ret-d"
     run_dump_test "x86-64-lfence-ret-e"
     run_dump_test "x86-64-lfence-byte"
+    run_dump_test "k1omni"
+    run_dump_test "k1omni-intel"
+    run_dump_test "k1omni-branch"
+    run_dump_test "k1omni-branch-intel"
+    run_list_test "k1omni-inval-reg" "-march=k1om -al"
+    run_dump_test "nops-1-k1om"
+    run_dump_test "nops-4-k1om"
 
     if { ![istarget "*-*-aix*"]
       && ![istarget "*-*-beos*"]
