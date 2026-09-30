@@ -4575,7 +4575,16 @@ static const char *const dwarf_regnames_x86_64[] =
   "es", "cs", "ss", "ds", "fs", "gs", NULL, NULL,
   "fs.base", "gs.base", NULL, NULL,
   "tr", "ldtr",
-  "mxcsr", "fcw", "fsw"
+  "mxcsr", "fcw", "fsw",
+  NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  "k0", "k1", "k2", "k3", "k4", "k5", "k6", "k7",
+  "vxcsr"
 };
 
 void
