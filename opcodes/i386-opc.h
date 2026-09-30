@@ -162,6 +162,8 @@ enum
   CpuVMFUNC,
   /* Intel MPX Instructions required  */
   CpuMPX,
+  /* Intel K1OM New Instructions required */
+  CpuK1OMNI,
   /* 64bit support available, used by -march= in assembler.  */
   CpuLM,
   /* RDRSEED instruction required.  */
@@ -292,6 +294,7 @@ typedef union i386_cpu_flags
       unsigned int cpuinvpcid:1;
       unsigned int cpuvmfunc:1;
       unsigned int cpumpx:1;
+      unsigned int cpuk1omni:1;
       unsigned int cpulm:1;
       unsigned int cpurdseed:1;
       unsigned int cpuadx:1;
@@ -428,6 +431,8 @@ enum
 #define VEX256		2
 #define VEXScalar	3
   Vex,
+  /* insn has MVEX prefix.  */
+  MVex,
   /* How to encode VEX.vvvv:
      0: VEX.vvvv must be 1111b.
      1: VEX.NDS.  Register-only source is encoded in VEX.vvvv where
@@ -470,6 +475,7 @@ enum
 #define XOP08		3
 #define XOP09		4
 #define XOP0A		5
+#define VEX		6
   VexOpcode,
   /* number of VEX source operands:
      0: <= 2 source operands.
@@ -547,6 +553,50 @@ enum
   /* Default mask isn't allowed.  */
   NoDefMask,
 
+  /* Instruction with vector operations.  */
+  VecOp,
+  /* Vector instruction type:
+	1: Floating point.
+	2: Integer.
+   */
+#define VECFP		1
+#define VECINT		2
+  VecType,
+  /* Memory vector instruction:
+	1: Load.
+	2: Store.
+   */
+#define VECLOAD		1
+#define VECSTORE	2
+  VecMem,
+  /* Memory instruction shift.  */
+  VecMemShift,
+  /* No swizzle.  */
+  NoSwizzle,
+  /* No rounding.  */
+  NoRounding,
+  /* No EH:
+     1: The EH bit is 0.
+     2: The EH bit is 1.
+   */
+#define EH0		1
+#define EH1		2
+  NoEH,
+  /* SAE only.  */
+  SAEOnly,
+  /* No broadcast.  */
+  NoBroadcast,
+  /* Broadcast only:
+     1. All broadcasts are allowed.
+     2. Don't allow the second broadcast.
+     3. Accept {8to8}/{1to8}/{4to8} instead {16to16}/{1to16}/{4to16}.
+   */
+#define BROADCASTALL		1
+#define BROADCASTNOSECOND	2
+#define BROADCAST64BIT		3
+  BroadcastOnly,
+  /* Instruction with vector 8bit displacement. */
+  VecDisp8,
   /* Compatible with old (<= 2.8.1) versions of gcc  */
   OldGcc,
   /* AT&T mnemonic.  */
@@ -603,6 +653,7 @@ typedef struct i386_opcode_modifier
   unsigned int rex64:1;
   unsigned int ugh:1;
   unsigned int vex:2;
+  unsigned int mvex:1;
   unsigned int vexvvvv:2;
   unsigned int vexw:2;
   unsigned int vexopcode:3;
@@ -619,6 +670,17 @@ typedef struct i386_opcode_modifier
   unsigned int sae:1;
   unsigned int disp8memshift:3;
   unsigned int nodefmask:1;
+  unsigned int vecop:1;
+  unsigned int vectype:2;
+  unsigned int vecmem:2;
+  unsigned int vecmemshift:3;
+  unsigned int noswizzle:1;
+  unsigned int norounding:1;
+  unsigned int noeh:2;
+  unsigned int saeonly:1;
+  unsigned int nobroadcast:1;
+  unsigned int broadcastonly:2;
+  unsigned int vecdisp8:1;
   unsigned int oldgcc:1;
   unsigned int attmnemonic:1;
   unsigned int attsyntax:1;
@@ -661,6 +723,8 @@ enum
   SReg3,
   /* 1 bit immediate */
   Imm1,
+  /* 2 bit immediate */
+  Imm2,
   /* 8 bit immediate */
   Imm8,
   /* 8 bit immediate sign extended */
@@ -777,6 +841,7 @@ typedef union i386_operand_type
       unsigned int sreg2:1;
       unsigned int sreg3:1;
       unsigned int imm1:1;
+      unsigned int imm2:1;
       unsigned int imm8:1;
       unsigned int imm8s:1;
       unsigned int imm16:1;
