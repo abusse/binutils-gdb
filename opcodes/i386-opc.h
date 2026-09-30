@@ -142,6 +142,8 @@ enum
   CpuINVPCID,
   /* VMFUNC Instruction required */
   CpuVMFUNC,
+  /* Intel K1OM New Instructions required */
+  CpuK1OMNI,
   /* 64bit support available, used by -march= in assembler.  */
   CpuLM,
   /* 64bit support required  */
@@ -222,6 +224,7 @@ typedef union i386_cpu_flags
       unsigned int cpurtm:1;
       unsigned int cpuinvpcid:1;
       unsigned int cpuvmfunc:1;
+      unsigned int cpuk1omni:1;
       unsigned int cpulm:1;
       unsigned int cpu64:1;
       unsigned int cpuno64:1;
@@ -334,6 +337,8 @@ enum
 #define VEX256		2
 #define VEXScalar	3
   Vex,
+  /* insn has MVEX prefix.  */
+  MVex,
   /* How to encode VEX.vvvv:
      0: VEX.vvvv must be 1111b.
      1: VEX.NDS.  Register-only source is encoded in VEX.vvvv where
@@ -376,6 +381,7 @@ enum
 #define XOP08		3
 #define XOP09		4
 #define XOP0A		5
+#define VEX		6
   VexOpcode,
   /* number of VEX source operands:
      0: <= 2 source operands.
@@ -398,6 +404,57 @@ enum
   SSE2AVX,
   /* No AVX equivalent */
   NoAVX,
+  /* Instruction with vector operations.  */
+  VecOp,
+  /* Vector instruction type:
+	1: Floating point.
+	2: Integer.
+   */
+#define VECFP		1
+#define VECINT		2
+  VecType,
+  /* Memory vector instruction:
+	1: Load.
+	2: Store.
+   */
+#define VECLOAD		1
+#define VECSTORE	2
+  VecMem,
+  /* Memory instruction shift.  */
+  VecMemShift,
+  /* No default mask.  */
+  NoDefMask,
+  /* No swizzle.  */
+  NoSwizzle,
+  /* No rounding.  */
+  NoRounding,
+  /* No EH:
+     1: The EH bit is 0.
+     2: The EH bit is 1.
+   */
+#define EH0		1
+#define EH1		2
+  NoEH,
+  /* SAE only.  */
+  SAEOnly,
+  /* No broadcast.  */
+  NoBroadcast,
+  /* Broadcast only:
+     1. All broadcasts are allowed.
+     2. Don't allow the second broadcast.
+     3. Accept {8to8}/{1to8}/{4to8} instead {16to16}/{1to16}/{4to16}.
+   */
+#define BROADCASTALL		1
+#define BROADCASTNOSECOND	2
+#define BROADCAST64BIT		3
+  BroadcastOnly,
+  /* Element size of vector insn:
+	0: 32bit.
+	1: 64bit.
+   */
+  VecESize,
+  /* Instruction with vector 8bit displacement. */
+  VecDisp8,
   /* Compatible with old (<= 2.8.1) versions of gcc  */
   OldGcc,
   /* AT&T mnemonic.  */
@@ -452,6 +509,7 @@ typedef struct i386_opcode_modifier
   unsigned int rex64:1;
   unsigned int ugh:1;
   unsigned int vex:2;
+  unsigned int mvex:1;
   unsigned int vexvvvv:2;
   unsigned int vexw:2;
   unsigned int vexopcode:3;
@@ -460,6 +518,19 @@ typedef struct i386_opcode_modifier
   unsigned int vecsib:2;
   unsigned int sse2avx:1;
   unsigned int noavx:1;
+  unsigned int vecop:1;
+  unsigned int vectype:2;
+  unsigned int vecmem:2;
+  unsigned int vecmemshift:3;
+  unsigned int nodefmask:1;
+  unsigned int noswizzle:1;
+  unsigned int norounding:1;
+  unsigned int noeh:2;
+  unsigned int saeonly:1;
+  unsigned int nobroadcast:1;
+  unsigned int broadcastonly:2;
+  unsigned int vecesize:1;
+  unsigned int vecdisp8:1;
   unsigned int oldgcc:1;
   unsigned int attmnemonic:1;
   unsigned int attsyntax:1;
@@ -486,6 +557,10 @@ enum
   RegXMM,
   /* AVX registers */
   RegYMM,
+  /* K1OM registers */
+  RegZMM,
+  /* Vector Mask register */
+  RegMask,
   /* Control register */
   Control,
   /* Debug register */
@@ -498,6 +573,8 @@ enum
   SReg3,
   /* 1 bit immediate */
   Imm1,
+  /* 2 bit immediate */
+  Imm2,
   /* 8 bit immediate */
   Imm8,
   /* 8 bit immediate sign extended */
@@ -565,6 +642,8 @@ enum
   Xmmword,
   /* YMMWORD memory. */
   Ymmword,
+  /* ZMMWORD memory. */
+  Zmmword,
   /* Unspecified memory size.  */
   Unspecified,
   /* Any memory size.  */
@@ -572,6 +651,8 @@ enum
 
   /* Vector 4 bit immediate.  */
   Vec_Imm4,
+  /* Vector 8bit displacement */
+  Vec_Disp8,
 
   /* The last bitfield in i386_operand_type.  */
   OTMax
@@ -598,12 +679,15 @@ typedef union i386_operand_type
       unsigned int regmmx:1;
       unsigned int regxmm:1;
       unsigned int regymm:1;
+      unsigned int regzmm:1;
+      unsigned int regmask:1;
       unsigned int control:1;
       unsigned int debug:1;
       unsigned int test:1;
       unsigned int sreg2:1;
       unsigned int sreg3:1;
       unsigned int imm1:1;
+      unsigned int imm2:1;
       unsigned int imm8:1;
       unsigned int imm8s:1;
       unsigned int imm16:1;
@@ -632,9 +716,11 @@ typedef union i386_operand_type
       unsigned int tbyte:1;
       unsigned int xmmword:1;
       unsigned int ymmword:1;
+      unsigned int zmmword:1;
       unsigned int unspecified:1;
       unsigned int anysize:1;
       unsigned int vec_imm4:1;
+      unsigned int vec_disp8:1;
 #ifdef OTUnused
       unsigned int unused:(OTNumOfBits - OTUnused);
 #endif
@@ -696,6 +782,7 @@ typedef struct
   unsigned char reg_flags;
 #define RegRex	    0x1  /* Extended register.  */
 #define RegRex64    0x2  /* Extended 8 bit register.  */
+#define RegVRex	    0x4  /* Extended vector register.  */
   unsigned char reg_num;
 #define RegRip	((unsigned char ) ~0)
 #define RegEip	(RegRip - 1)
