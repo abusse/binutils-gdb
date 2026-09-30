@@ -21,6 +21,7 @@ Disassembly of section \.text:
 .*[ 	]+R_386_16[ 	]+mm0
 .*[ 	]+R_386_16[ 	]+xmm0
 .*[ 	]+R_386_16[ 	]+ymm0
+.*[ 	]+R_386_16[ 	]+zmm0
 .*[ 	]+R_386_32[ 	]+rax
 .*[ 	]+R_386_32[ 	]+axl
 .*[ 	]+R_386_32[ 	]+r8b
@@ -34,6 +35,7 @@ Disassembly of section \.text:
 .*[ 	]+R_386_32[ 	]+mm0
 .*[ 	]+R_386_32[ 	]+xmm0
 .*[ 	]+R_386_32[ 	]+ymm0
+.*[ 	]+R_386_32[ 	]+zmm0
 .*:[ 	]+dd c0[ 	]+ffree[ 	]+%st(\(0\))?
 .*:[ 	]+0f ef c0[ 	]+pxor[ 	]+%mm0,%mm0
 .*:[ 	]+0f 57 c0[ 	]+xorps[ 	]+%xmm0,%xmm0
@@ -49,4 +51,7 @@ Disassembly of section \.text:
 
 .* <ymm8>:
 .*[ 	]+<ymm8>
+
+.* <zmm8>:
+.*[ 	]+<zmm8>
 #pass

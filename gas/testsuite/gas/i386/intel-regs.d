@@ -57,4 +57,6 @@ Disassembly of section \.text:
 
 .* <tmm0>:
 .*[ 	]+<tmm0>
+.* <zmm8>:
+.*[ 	]+<zmm8>
 #pass
