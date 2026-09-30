@@ -1019,7 +1019,7 @@ changequote([,])dnl
 	COREFILE=trad-core.lo
 	TRAD_HEADER='"hosts/vaxbsd.h"'
 	;;
-  x86_64-*-linux*)
+  x86_64-*-linux* | k1om-*-linux*)
 	CORE_HEADER='"hosts/x86-64linux.h"'
 	;;
   x86_64-*-netbsd* | x86_64-*-openbsd*)
