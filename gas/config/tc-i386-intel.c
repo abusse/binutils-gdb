@@ -560,6 +560,8 @@ i386_intel_operand (char *operand_string, int got_a_float)
   int ret;
 
   /* Handle vector immediates.  */
+  if (Vec_immediate (operand_string))
+    return 1;
   if (RC_SAE_immediate (operand_string))
     return 1;
 
@@ -750,7 +752,8 @@ i386_intel_operand (char *operand_string, int got_a_float)
     {
       bfd_boolean jumpabsolute = FALSE;
 
-      if (i.op[this_operand].regs
+      if ((i.op[this_operand].regs
+	   && i.op[this_operand].regs->reg_type.bitfield.class != RegMask)
 	  || intel_state.base
 	  || intel_state.index
 	  || intel_state.is_mem > 1)
