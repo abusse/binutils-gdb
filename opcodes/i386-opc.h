@@ -161,6 +161,8 @@ enum
   CpuVMFUNC,
   /* Intel MPX Instructions required  */
   CpuMPX,
+  /* Intel K1OM New Instructions required */
+  CpuK1OMNI,
   /* 64bit support available, used by -march= in assembler.  */
   CpuLM,
   /* RDRSEED instruction required.  */
@@ -366,6 +368,7 @@ typedef union i386_cpu_flags
       unsigned int cpuinvpcid:1;
       unsigned int cpuvmfunc:1;
       unsigned int cpumpx:1;
+      unsigned int cpuk1omni:1;
       unsigned int cpulm:1;
       unsigned int cpurdseed:1;
       unsigned int cpuadx:1;
@@ -549,6 +552,8 @@ enum
 #define VEX256		2
 #define VEXScalar	3
   Vex,
+  /* insn has MVEX prefix.  */
+  MVex,
   /* How to encode VEX.vvvv:
      0: VEX.vvvv must be 1111b.
      1: VEX.NDS.  Register-only source is encoded in VEX.vvvv where
@@ -696,6 +701,50 @@ enum
   /* Support encoding optimization.  */
   Optimize,
 
+  /* Instruction with vector operations.  */
+  VecOp,
+  /* Vector instruction type:
+	1: Floating point.
+	2: Integer.
+   */
+#define VECFP		1
+#define VECINT		2
+  VecType,
+  /* Memory vector instruction:
+	1: Load.
+	2: Store.
+   */
+#define VECLOAD		1
+#define VECSTORE	2
+  VecMem,
+  /* Memory instruction shift.  */
+  VecMemShift,
+  /* No swizzle.  */
+  NoSwizzle,
+  /* No rounding.  */
+  NoRounding,
+  /* No EH:
+     1: The EH bit is 0.
+     2: The EH bit is 1.
+   */
+#define EH0		1
+#define EH1		2
+  NoEH,
+  /* SAE only.  */
+  SAEOnly,
+  /* No broadcast.  */
+  NoBroadcast,
+  /* Broadcast only:
+     1. All broadcasts are allowed.
+     2. Don't allow the second broadcast.
+     3. Accept {8to8}/{1to8}/{4to8} instead {16to16}/{1to16}/{4to16}.
+   */
+#define BROADCASTALL		1
+#define BROADCASTNOSECOND	2
+#define BROADCAST64BIT		3
+  BroadcastOnly,
+  /* Instruction with vector 8bit displacement. */
+  VecDisp8,
   /* AT&T mnemonic.  */
   ATTMnemonic,
   /* AT&T syntax.  */
@@ -752,6 +801,7 @@ typedef struct i386_opcode_modifier
   unsigned int ugh:1;
   unsigned int pseudovexprefix:1;
   unsigned int vex:2;
+  unsigned int mvex:1;
   unsigned int vexvvvv:2;
   unsigned int vexw:2;
   unsigned int opcodespace:4;
@@ -769,6 +819,17 @@ typedef struct i386_opcode_modifier
   unsigned int implicitquadgroup:1;
   unsigned int swapsources:1;
   unsigned int optimize:1;
+  unsigned int vecop:1;
+  unsigned int vectype:2;
+  unsigned int vecmem:2;
+  unsigned int vecmemshift:3;
+  unsigned int noswizzle:1;
+  unsigned int norounding:1;
+  unsigned int noeh:2;
+  unsigned int saeonly:1;
+  unsigned int nobroadcast:1;
+  unsigned int broadcastonly:2;
+  unsigned int vecdisp8:1;
   unsigned int attmnemonic:1;
   unsigned int attsyntax:1;
   unsigned int intelsyntax:1;
@@ -812,6 +873,8 @@ enum
   ClassInstance = CLASS_WIDTH + INSTANCE_WIDTH - 1,
   /* 1 bit immediate */
   Imm1,
+  /* 2 bit immediate */
+  Imm2,
   /* 8 bit immediate */
   Imm8,
   /* 8 bit immediate sign extended */
@@ -884,6 +947,7 @@ typedef union i386_operand_type
       unsigned int class:CLASS_WIDTH;
       unsigned int instance:INSTANCE_WIDTH;
       unsigned int imm1:1;
+      unsigned int imm2:1;
       unsigned int imm8:1;
       unsigned int imm8s:1;
       unsigned int imm16:1;
