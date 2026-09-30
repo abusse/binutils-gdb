@@ -109,6 +109,8 @@ enum i386_cpu
   CpuAVX512DQ,
   /* Intel AVX-512 BW Instructions support required.  */
   CpuAVX512BW,
+  /* Intel K1OM support required */
+  CpuK1OM,
   /* Intel IAMCU support required */
   CpuIAMCU,
   /* Xsave/xrstor New Instructions support required */
@@ -371,7 +373,7 @@ enum i386_cpu
 
 /* If you get a compiler error for zero width of an unused field,
    comment the respective one out.  */
-#define CpuUnused	(CpuMax + 1)
+/* #define CpuUnused	(CpuMax + 1) */
 #define CpuAttrUnused	(CpuIsaBits + CpuMax + 1 - CpuAttrEnums)
 
 #define CPU_FLAGS_COMMON \
@@ -449,6 +451,7 @@ typedef union i386_cpu_flags
       unsigned int cpuavx512pf:1;
       unsigned int cpuavx512dq:1;
       unsigned int cpuavx512bw:1;
+      unsigned int cpuk1om:1;
       unsigned int cpuiamcu:1;
       unsigned int cpuxsave:1;
       unsigned int cpuxsaveopt:1;
