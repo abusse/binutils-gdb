@@ -14952,6 +14952,11 @@ OP_MVEX_VEX (instr_info *ins, int bytemode, int sizeflag ATTRIBUTE_UNUSED)
 	    names = att_names32;
 	  break;
 	case mask_mode:
+	  if (reg > 0x7)
+	    {
+	      oappend (ins, "(bad)");
+	      return;
+	    }
 	  names = att_names_mask;
 	  break;
 	default:
@@ -14979,6 +14984,11 @@ OP_MVEX_VEX (instr_info *ins, int bytemode, int sizeflag ATTRIBUTE_UNUSED)
 	switch (bytemode)
 	  {
 	  case mask_zmm_mode:
+	    if (reg > 0x7)
+	      {
+		oappend (ins, "(bad)");
+		return;
+	      }
 	    names = att_names_mask;
 	    break;
 	  case x_mode:
