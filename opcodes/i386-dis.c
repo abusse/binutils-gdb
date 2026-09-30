@@ -13946,6 +13946,11 @@ OP_E_register (int bytemode, int sizeflag)
 	}
       break;
     case mask_mode:
+      if (reg > 0x7)
+	{
+	  oappend ("(bad)");
+	  return;
+	}
       names = names_mask;
       break;
     case 0:
@@ -14481,6 +14486,11 @@ OP_G (int bytemode, int sizeflag)
 	oappend (names32[modrm.reg + add]);
       break;
     case mask_mode:
+      if ((modrm.reg + add) > 0x7)
+	{
+	  oappend ("(bad)");
+	  return;
+	}
       oappend (names_mask[modrm.reg + add]);
       break;
     default:
@@ -16625,6 +16635,11 @@ OP_MVEX_VEX (int bytemode, int sizeflag ATTRIBUTE_UNUSED)
 	    names = names32;
 	  break;
 	case mask_mode:
+	  if (reg > 0x7)
+	    {
+	      oappend ("(bad)");
+	      return;
+	    }
 	  names = names_mask;
 	  break;
 	default:
@@ -16653,6 +16668,11 @@ OP_MVEX_VEX (int bytemode, int sizeflag ATTRIBUTE_UNUSED)
 	switch (bytemode)
 	  {
 	  case mask_zmm_mode:
+	    if (reg > 0x7)
+	      {
+		oappend ("(bad)");
+		return;
+	      }
 	    names = names_mask;
 	    break;
 	  case vex_mode:
