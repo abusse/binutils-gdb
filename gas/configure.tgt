@@ -113,7 +113,7 @@ case ${cpu} in
   v850*)		cpu_type=v850 ;;
   visium)		cpu_type=visium endian=big ;;
   wasm32)               cpu_type=wasm32 endian=little ;;
-  x86_64*)		cpu_type=i386 arch=x86_64;;
+  x86_64*|k1om*)		cpu_type=i386 arch=x86_64;;
   xgate)		cpu_type=xgate ;;
   xtensa*)		cpu_type=xtensa arch=xtensa ;;
   *)			cpu_type=${cpu} ;;
