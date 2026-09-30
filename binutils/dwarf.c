@@ -8755,6 +8755,21 @@ init_dwarf_regnames_x86_64 (void)
   dwarf_regnames_lookup_func = regname_internal_by_table_only;
 }
 
+static const char *
+regname_internal_k1om (unsigned int regno)
+{
+  if (regno == 126)
+    return "vxcsr";
+  return regname_internal_by_table_only (regno);
+}
+
+static void
+init_dwarf_regnames_k1om (void)
+{
+  init_dwarf_regnames_x86_64 ();
+  dwarf_regnames_lookup_func = regname_internal_k1om;
+}
+
 static const char *const dwarf_regnames_aarch64[] =
 {
    "x0",  "x1",  "x2",  "x3",  "x4",  "x5",  "x6",  "x7",
@@ -8927,8 +8942,11 @@ init_dwarf_by_elf_machine_code (unsigned int e_machine)
 
     case EM_X86_64:
     case EM_L1OM:
-    case EM_K1OM:
       init_dwarf_regnames_x86_64 ();
+      break;
+
+    case EM_K1OM:
+      init_dwarf_regnames_k1om ();
       break;
 
     case EM_AARCH64:
