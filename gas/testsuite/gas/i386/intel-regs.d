@@ -52,4 +52,7 @@ Disassembly of section \.text:
 
 .* <ymm8>:
 .*[ 	]+<ymm8>
+
+.* <zmm8>:
+.*[ 	]+<zmm8>
 #pass
