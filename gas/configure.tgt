@@ -109,7 +109,7 @@ case ${cpu} in
   tilegx*)		cpu_type=tilegx endian=little ;;
   v850*)		cpu_type=v850 ;;
   visium)		cpu_type=visium endian=big ;;
-  x86_64*)		cpu_type=i386 arch=x86_64;;
+  x86_64*|k1om*)	cpu_type=i386 arch=x86_64 ;;
   xgate)		cpu_type=xgate ;;
   xtensa*)		cpu_type=xtensa arch=xtensa ;;
   *)			cpu_type=${cpu} ;;
