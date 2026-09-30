@@ -63,3 +63,5 @@ ymm8:
 	jmp	ymm8
 tmm0:
 	jmp	tmm0
+zmm8:
+	jmp	zmm8
