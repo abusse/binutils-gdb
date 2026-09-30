@@ -229,6 +229,98 @@ struct Broadcast_Operation
 
 static struct Broadcast_Operation broadcast_op;
 
+struct Vec_Swizzle_Shift
+{
+  int encode;		/* Encode value */
+  int shift;		/* Shift for Vec_Disp8 */
+};
+
+struct Vec_Swizzle_Bits
+{
+  struct Vec_Swizzle_Shift reg;		/* Register SwizzUpConv */
+  struct Vec_Swizzle_Shift fp;		/* FP memory SwizzUpConv */
+  struct Vec_Swizzle_Shift integer;	/* Integer memory SwizzUpConv */
+  /* Load UpConv.
+     0: Integer load UpConv.
+     1: FP load UpConv.
+   */
+  struct Vec_Swizzle_Shift load[2];
+  /* Store DownConv.
+     0: Integer store DownConv.
+     1: FP store DownConv.
+   */
+  struct Vec_Swizzle_Shift store[2];
+};
+
+struct Vec_Swizzle
+{
+  /* Array elements in bits:
+
+	0: 32bit.
+	1: 64bit.
+   */
+  struct Vec_Swizzle_Bits bits[2];
+  enum
+    {
+      register_swizzle,
+      transform_swizzle,
+      memory_broadcast,
+      memory_swizzle
+    } type;
+  const char *name;
+  unsigned int len;
+};
+
+struct Vec_Immediate
+{
+  unsigned int imm;	/* Immediate value.  */
+  enum
+    {
+      rounding,		/* Static rounding mode.  */
+      sae		/* Supress all exceptions.  */
+    } type;
+  const char *name;
+  unsigned int len;
+};
+
+struct Vec_NT_Operation
+{
+  unsigned int nt;
+  unsigned int eh;
+  /* The operand where this operation is associated.  */
+  int operand;
+};
+
+struct Vec_Mask_Operation
+{
+  const reg_entry *mask;
+  /* The operand where this operation is associated.  */
+  int operand;
+};
+
+struct Vec_Swizzle_Operation
+{
+  const struct Vec_Swizzle *swizzle;
+  /* The operand this operation is associated with.  */
+  int operand;
+};
+
+struct Vec_operations
+{
+  struct Vec_NT_Operation nt;
+  struct Vec_Mask_Operation mask;
+  /* There are at most one for swizzle and one for transform.  */
+  struct Vec_Swizzle_Operation transform;
+  struct Vec_Swizzle_Operation swizzle;
+};
+
+/* Vector extensions.  */
+struct Vec_extensions
+{
+  int shift;
+  int swizzle;
+};
+
 /* VEX prefix.  */
 typedef struct
 {
@@ -273,7 +365,18 @@ enum i386_error
     unsupported_rc_sae,
     rc_sae_operand_not_last_imm,
     invalid_register_operand,
-    try_vector_disp8
+    try_vector_disp8,
+    too_many_vector_swizzle,
+    no_vector_swizzle,
+    no_vector_broadcast,
+    no_static_rounding,
+    no_supress_all_exceptions,
+    invalid_vector_immediate_operand,
+    invalid_vector_swizzle,
+    vector_swizzle_tranformation_not_on_source,
+    eh_not_on_memory_operand,
+    unsupported_vector_operation,
+    invalid_eh
   };
 
 struct _i386_insn
@@ -343,6 +446,18 @@ struct _i386_insn
     /* Compressed disp8*N attribute.  */
     unsigned int memshift;
 
+    /* Vector extensions.  */
+    struct Vec_extensions vec;
+
+    /* Vecor mask, swizzle and transform operations.  */
+    struct Vec_operations vec_ops;
+
+    /* Vector immediates.  We allocate MAX_OPERANDS elements instead of
+       MAX_IMMEDIATE_OPERANDS since immediates come last in Intel
+       mode.
+     */
+    const struct Vec_Immediate *vec_imms[MAX_OPERANDS];
+
     /* Swap operand in encoding.  */
     unsigned int swap_operand;
 
@@ -371,6 +486,267 @@ struct _i386_insn
   };
 
 typedef struct _i386_insn i386_insn;
+
+/* Vector rounding/SAE table.  */
+
+static const struct Vec_Immediate Vec_ImmediateTable[] =
+{
+  {  0, rounding,	STRING_COMMA_LEN ("{rn}") },
+  {  1, rounding,	STRING_COMMA_LEN ("{rd}") },
+  {  2, rounding,	STRING_COMMA_LEN ("{ru}") },
+  {  3, rounding,	STRING_COMMA_LEN ("{rz}") },
+  {  4, rounding,	STRING_COMMA_LEN ("{rn-sae}") },
+  {  5, rounding,	STRING_COMMA_LEN ("{rd-sae}") },
+  {  6, rounding,	STRING_COMMA_LEN ("{ru-sae}") },
+  {  7, rounding,	STRING_COMMA_LEN ("{rz-sae}") },
+  {  4, sae,		STRING_COMMA_LEN ("{sae}") },
+};
+
+static const struct Vec_Immediate Vec_ImmediateTable_Naked[] =
+{
+  {  0, rounding,	STRING_COMMA_LEN ("rn") },
+  {  1, rounding,	STRING_COMMA_LEN ("rd") },
+  {  2, rounding,	STRING_COMMA_LEN ("ru") },
+  {  3, rounding,	STRING_COMMA_LEN ("rz") },
+};
+
+/* Vector swizzle/conversion table.  */
+
+static const struct Vec_Swizzle Vec_SwizzleTable[] =
+{
+  /*     reg        fp        int
+	 load
+	 store
+   */
+  {
+    {
+      { {0, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {0, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    register_swizzle,
+    STRING_COMMA_LEN ("{dcba}")
+  },
+  {
+    {
+      { {1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    register_swizzle,
+    STRING_COMMA_LEN ("{cdab}")
+  },
+  {
+    {
+      { {2, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {2, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    register_swizzle,
+    STRING_COMMA_LEN ("{badc}")
+  },
+  {
+    {
+      { {4, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {4, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    register_swizzle,
+    STRING_COMMA_LEN ("{aaaa}")
+  },
+  {
+    {
+      { {5, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {5, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    register_swizzle,
+    STRING_COMMA_LEN ("{bbbb}")
+  },
+  {
+    {
+      { {6, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {6, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    register_swizzle,
+    STRING_COMMA_LEN ("{cccc}")
+  },
+  {
+    {
+      { {7, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {7, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    register_swizzle,
+    STRING_COMMA_LEN ("{dddd}")
+  },
+  {
+    {
+      { {3, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {3, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    register_swizzle,
+    STRING_COMMA_LEN ("{dacb}")
+  },
+  {
+    {
+      { {-1, -1}, {0, 6}, {0, 6},
+	{ {0, 2}, {0, 2} },
+	{ {-1, -1}, {-1, -1} } },
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    memory_broadcast,
+    STRING_COMMA_LEN ("{16to16}")
+  },
+  {
+    {
+      { {-1, -1}, {1, 2}, {1, 2},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    memory_broadcast,
+    STRING_COMMA_LEN ("{1to16}")
+  },
+  {
+    {
+      { {-1, -1}, {2, 4}, {2, 4},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    memory_broadcast,
+    STRING_COMMA_LEN ("{4to16}")
+  },
+  {
+    {
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {-1, -1}, {0, 6}, {0, 6},
+	{ {0, 3}, {0, 3} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    memory_broadcast,
+    STRING_COMMA_LEN ("{8to8}")
+  },
+  {
+    {
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {-1, -1}, {1, 3}, {1, 3},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    memory_broadcast,
+    STRING_COMMA_LEN ("{1to8}")
+  },
+  {
+    {
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } },
+      { {-1, -1}, {2, 5}, {2, 5},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    memory_broadcast,
+    STRING_COMMA_LEN ("{4to8}")
+  },
+  {
+    {
+      { {-1, -1}, {4, 4}, {4, 4},
+	{ {4, 0}, {4, 0} },
+	{ {4, 0}, {4, 0} } },
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    transform_swizzle,
+    STRING_COMMA_LEN ("{uint8}")
+  },
+  {
+    {
+      { {-1, -1}, {5, 4}, {5, 4},
+	{ {5, 0}, {5, 0} },
+	{ {5, 0}, {5, 0} } },
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    transform_swizzle,
+    STRING_COMMA_LEN ("{sint8}")
+  },
+  {
+    {
+      { {-1, -1}, {3, 5}, {-1, -1},
+	{ {-1, -1}, {3, 1} },
+	{ {-1, -1}, {3, 1} } },
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    transform_swizzle,
+    STRING_COMMA_LEN ("{float16}")
+  },
+  {
+    {
+      { {-1, -1}, {6, 5}, {6, 5},
+	{ {6, 1}, {6, 1} },
+	{ {6, 1}, {6, 1} } },
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    transform_swizzle,
+    STRING_COMMA_LEN ("{uint16}")
+  },
+  {
+    {
+      { {-1, -1}, {7, 5}, {7, 5},
+	{ {7, 1}, {7, 1} },
+	{ {7, 1}, {7, 1} } },
+      { {-1, -1}, {-1, -1}, {-1, -1},
+	{ {-1, -1}, {-1, -1} },
+	{ {-1, -1}, {-1, -1} } }
+    },
+    transform_swizzle,
+    STRING_COMMA_LEN ("{sint16}")
+  }
+};
 
 /* Link RC type with corresponding string, that'll be looked for in
    asm.  */
@@ -638,14 +1014,15 @@ unsigned int x86_dwarf2_return_column;
 int x86_cie_data_alignment;
 
 /* Interface to relax_segment.
-   There are 3 major relax states for 386 jump insns because the
+   There are 4 major relax states for 386 jump insns because the
    different types of jumps add different sizes to frags when we're
    figuring out what sort of jump to choose to reach a given label.  */
 
 /* Types.  */
 #define UNCOND_JUMP 0
 #define COND_JUMP 1
-#define COND_JUMP86 2
+#define COND_JUMPVEX 2
+#define COND_JUMP86 3
 
 /* Sizes.  */
 #define CODE16	1
@@ -704,6 +1081,16 @@ const relax_typeS md_relax_table[] =
   /* word conditionals add 3 bytes to frag:
      1 extra opcode byte, 2 displacement bytes.  */
   {0, 0, 3, 0},
+
+  /* COND_JUMPVEX states.  */
+  {127 + 1, -128 + 1, 1, ENCODE_RELAX_STATE (COND_JUMPVEX, BIG)},
+  {127 + 1, -128 + 1, 1, ENCODE_RELAX_STATE (COND_JUMPVEX, BIG16)},
+  /* dword conditionals adds 3 bytes to frag:
+     1 less VEX prefix byte, 4 displacement bytes.  */
+  {0, 0, 3, 0},
+  /* word conditionals add 3 bytes to frag:
+     1 less VEX prefix byte, 2 displacement bytes.  */
+  {0, 0, 1, 0},
 
   /* COND_JUMP86 states.  */
   {127 + 1, -128 + 1, 1, ENCODE_RELAX_STATE (COND_JUMP86, BIG)},
@@ -894,6 +1281,8 @@ static const arch_entry cpu_arch[] =
     CPU_RTM_FLAGS, 0, 0 },
   { STRING_COMMA_LEN (".invpcid"), PROCESSOR_UNKNOWN,
     CPU_INVPCID_FLAGS, 0, 0 },
+  { STRING_COMMA_LEN (".k1omni"), PROCESSOR_UNKNOWN,
+    CPU_K1OMNI_FLAGS, 0, 0 },
   { STRING_COMMA_LEN (".clflush"), PROCESSOR_UNKNOWN,
     CPU_CLFLUSH_FLAGS, 0, 0 },
   { STRING_COMMA_LEN (".nop"), PROCESSOR_UNKNOWN,
@@ -1639,7 +2028,9 @@ enum operand_type
   reg,
   imm,
   disp,
-  anymem
+  anymem,
+  vec_imm,
+  vec_mem
 };
 
 static INLINE int
@@ -1676,6 +2067,17 @@ operand_type_check (i386_operand_type t, enum operand_type c)
 	      || t.bitfield.disp64
 	      || t.bitfield.baseindex);
 
+    case vec_imm:
+      return t.bitfield.imm2;
+
+    case vec_mem:
+      return (t.bitfield.vec_disp8
+	      || t.bitfield.disp16
+	      || t.bitfield.disp32
+	      || t.bitfield.disp32s
+	      || t.bitfield.disp64
+	      || t.bitfield.baseindex);
+
     default:
       abort ();
     }
@@ -1705,6 +2107,11 @@ match_reg_size (const insn_template *t, unsigned int j)
 static INLINE int
 match_mem_size (const insn_template *t, unsigned int j)
 {
+  /* FIXME: KNC allows any memory size if ZMMWORD PTR is used.  The
+     proper fix requires check valid memory size for swizzle.  */
+  if (t->opcode_modifier.mvex && t->operand_types[j].bitfield.zmmword)
+    return 1;
+
   return (match_reg_size (t, j)
 	  && !((i.types[j].bitfield.unspecified
 		&& !i.broadcast
@@ -1937,6 +2344,25 @@ fits_in_vec_disp8 (offsetT num)
   int shift = i.memshift;
   unsigned int mask;
 
+  if (shift == -1)
+    abort ();
+
+  mask = (1 << shift) - 1;
+
+  /* Return 0 if NUM isn't properly aligned.  */
+  if ((num & mask))
+    return 0;
+
+  /* Check if NUM will fit in 8bit after shift.  */
+  return fits_in_signed_byte (num >> shift);
+}
+
+static INLINE int
+fits_in_mvex_disp8 (offsetT num)
+{
+  int shift = i.vec.shift;
+  unsigned int mask;
+  
   if (shift == -1)
     abort ();
 
@@ -2746,6 +3172,7 @@ const type_names[] =
   { OPERAND_TYPE_IMM32S, "i32s" },
   { OPERAND_TYPE_IMM64, "i64" },
   { OPERAND_TYPE_IMM1, "i1" },
+  { OPERAND_TYPE_IMM2, "i2" },
   { OPERAND_TYPE_BASEINDEX, "BaseIndex" },
   { OPERAND_TYPE_DISP8, "d8" },
   { OPERAND_TYPE_DISP16, "d16" },
@@ -3115,6 +3542,10 @@ build_vex_prefix (const insn_template *t)
 
       switch (i.tm.opcode_modifier.vexopcode)
 	{
+	case VEX:
+	  m = 0x0;
+	  i.vex.bytes[0] = 0xc4;
+	  break;
 	case VEX0F:
 	  m = 0x1;
 	  i.vex.bytes[0] = 0xc4;
@@ -3328,6 +3759,134 @@ build_evex_prefix (void)
     i.vex.bytes[3] |= i.mask->mask->reg_num;
 }
 
+/* Build the MVEX prefix.  */
+
+static void
+build_mvex_prefix (void)
+{
+  unsigned int register_specifier;
+  unsigned int implied_prefix;
+  unsigned int m, w;
+  rex_byte vrex_used = 0;
+
+  /* Check register specifier.  */
+  if (i.vex.register_specifier)
+    {
+      gas_assert ((i.vrex & REX_X) == 0);
+
+      register_specifier = i.vex.register_specifier->reg_num;
+      if ((i.vex.register_specifier->reg_flags & RegRex))
+	register_specifier += 8;
+      /* The uppper 16 registers are encoded in the fourth byte of
+	 the MVEX prefix.  */
+      if (!(i.vex.register_specifier->reg_flags & RegVRex))
+	i.vex.bytes[3] = 0x8;
+      register_specifier = ~register_specifier & 0xf;
+    }
+  else
+    {
+      register_specifier = 0xf;
+
+      /* Encode upper 16 vector index register in the fourth byte of
+	 the MVEX prefix.  */
+      if (!(i.vrex & REX_X))
+	i.vex.bytes[3] = 0x8;
+      else
+	vrex_used |= REX_X;
+    }
+
+  switch ((i.tm.base_opcode >> 8) & 0xff)
+    {
+    case 0:
+      implied_prefix = 0;
+      break;
+    case DATA_PREFIX_OPCODE:
+      implied_prefix = 1;
+      break;
+    case REPE_PREFIX_OPCODE:
+      implied_prefix = 2;
+      break;
+    case REPNE_PREFIX_OPCODE:
+      implied_prefix = 3;
+      break;
+    default:
+      abort ();
+    }
+
+  /* 4 byte MVEX prefix.  */
+  i.vex.length = 4;
+  i.vex.bytes[0] = 0x62;
+
+  /* mmmm bits.  */
+  switch (i.tm.opcode_modifier.vexopcode)
+    {
+    case VEX0F:
+      m = 0x1;
+      break;
+    case VEX0F38:
+      m = 0x2;
+      break;
+    case VEX0F3A:
+      m = 0x3;
+      break;
+    default:
+      abort ();
+      break;
+    }
+
+  /* The high 3 bits of the second MVEX byte are 1's compliment
+     of RXB bits from REX.  */
+  i.vex.bytes[1] = (~i.rex & 0x7) << 5 | m;
+
+  /* The fifth bit of the second MVEX byte is 1's compliment of the
+     REX_R bit in VREX.  */
+  if (!(i.vrex & REX_R))
+    i.vex.bytes[1] |= 0x10;
+  else
+    vrex_used |= REX_R;
+
+  if ((i.reg_operands + i.imm_operands) == i.operands)
+    { 
+      /* When all operands are registers, the REX_X bit in REX is not
+	 used.  We reuse it to encode the upper 16 registers, which
+	 is indicated by the REX_B bit in VREX.  The REX_X bit is
+	 encoded as 1's compliment.  */
+      if ((i.vrex & REX_B))
+	{
+	  vrex_used |= REX_B;
+	  i.vex.bytes[1] &= ~0x40;
+	}
+    }
+
+  /* MVEX instructions shouldn't need the REX prefix. */
+  i.vrex &= ~vrex_used;
+  gas_assert (i.vrex == 0);
+
+  /* Check the REX.W bit.  */
+  w = (i.rex & REX_W) ? 1 : 0;
+  if (i.tm.opcode_modifier.vexw)
+    {
+      if (w)
+	abort ();
+
+      if (i.tm.opcode_modifier.vexw == VEXW1)
+	w = 1;
+    }
+
+  /* The third byte of the MVEX prefix.  */ 
+  i.vex.bytes[2] = (w << 7 | register_specifier << 3
+		    | implied_prefix);
+
+  gas_assert (i.vec.swizzle != -1);
+
+  /* The fourth byte of the MVEX prefix.  */ 
+  i.vex.bytes[3] |= (((i.vec_ops.nt.nt
+		       | (i.tm.opcode_modifier.noeh == EH1)) << 7)
+		     | (i.vec.swizzle << 4));
+  if (i.vec_ops.mask.mask)
+    i.vex.bytes[3] |= i.vec_ops.mask.mask->reg_num;
+}
+
 static void
 process_immext (void)
 {
@@ -3390,7 +3949,8 @@ bad_register_operand:
   gas_assert (i.imm_operands <= 1
 	      && (i.operands <= 2
 		  || ((i.tm.opcode_modifier.vex
-		       || i.tm.opcode_modifier.evex)
+		       || i.tm.opcode_modifier.evex
+		       || i.tm.opcode_modifier.mvex)
 		      && i.operands <= 4)));
 
   exp = &im_expressions[i.imm_operands++];
@@ -3634,7 +4194,8 @@ md_assemble (char *line)
       as_warn (_("translating to `%sp'"), i.tm.name);
     }
 
-  if (i.tm.opcode_modifier.vex || i.tm.opcode_modifier.evex)
+  if (i.tm.opcode_modifier.vex || i.tm.opcode_modifier.evex
+      || i.tm.opcode_modifier.mvex)
     {
       if (flag_code == CODE_16BIT)
 	{
@@ -3645,6 +4206,8 @@ md_assemble (char *line)
 
       if (i.tm.opcode_modifier.vex)
 	build_vex_prefix (t);
+      else if (i.tm.opcode_modifier.mvex)
+	build_mvex_prefix ();
       else
 	build_evex_prefix ();
     }
@@ -4078,6 +4641,7 @@ swap_2_operands (int xchg1, int xchg2)
   union i386_op temp_op;
   i386_operand_type temp_type;
   enum bfd_reloc_code_real temp_reloc;
+  const struct Vec_Immediate* temp_imm;
 
   temp_type = i.types[xchg2];
   i.types[xchg2] = i.types[xchg1];
@@ -4088,6 +4652,41 @@ swap_2_operands (int xchg1, int xchg2)
   temp_reloc = i.reloc[xchg2];
   i.reloc[xchg2] = i.reloc[xchg1];
   i.reloc[xchg1] = temp_reloc;
+  temp_imm = i.vec_imms[xchg2];
+  i.vec_imms[xchg2] = i.vec_imms[xchg1];
+  i.vec_imms[xchg1] = temp_imm;
+
+  if (i.vec_ops.nt.nt)
+    {
+      if (i.vec_ops.nt.operand == xchg1)
+	i.vec_ops.nt.operand = xchg2;
+      else if (i.vec_ops.nt.operand == xchg2)
+	i.vec_ops.nt.operand = xchg1;
+    }
+
+  if (i.vec_ops.mask.mask)
+    {
+      if (i.vec_ops.mask.operand == xchg1)
+	i.vec_ops.mask.operand = xchg2;
+      else if (i.vec_ops.mask.operand == xchg2)
+	i.vec_ops.mask.operand = xchg1;
+    }
+
+  if (i.vec_ops.transform.swizzle)
+    {
+      if (i.vec_ops.transform.operand == xchg1)
+	i.vec_ops.transform.operand = xchg2;
+      else if (i.vec_ops.transform.operand == xchg2)
+	i.vec_ops.transform.operand = xchg1;
+    }
+
+  if (i.vec_ops.swizzle.swizzle)
+    {
+      if (i.vec_ops.swizzle.operand == xchg1)
+	i.vec_ops.swizzle.operand = xchg2;
+      else if (i.vec_ops.swizzle.operand == xchg2)
+	i.vec_ops.swizzle.operand = xchg1;
+    }
 
   if (i.mask)
     {
@@ -4360,12 +4959,606 @@ optimize_disp (void)
       }
 }
 
+/* Check source operand for vector normal instructions.  */
+
+static int
+check_VecNorm (const insn_template *t, int src)
+{
+  const struct Vec_Swizzle_Operation *op = NULL;
+
+  if (i.vec_ops.transform.swizzle)
+    {
+      /* Only one vector operation is allowed.  */
+      if (i.vec_ops.swizzle.swizzle)
+	{
+	  i.error = too_many_vector_swizzle;
+	  return 1;
+	}
+      op = &i.vec_ops.transform;
+    }
+  else if (i.vec_ops.swizzle.swizzle)
+    op = &i.vec_ops.swizzle;
+
+  /* Set swizzle.  */
+  if (op)
+    {
+      const struct Vec_Swizzle_Shift *swizzle;
+      unsigned int idx;
+      int half_broadcast = 0;
+
+      if (t->opcode_modifier.noswizzle)
+	{
+	  if (op->swizzle->type == memory_broadcast)
+	    {
+	      if (!t->opcode_modifier.broadcastonly)
+		{
+		  i.error = no_vector_broadcast;
+		  return 1;
+		}
+	    }
+	  else
+	    {
+	      i.error = no_vector_swizzle;
+	      return 1;
+	    }
+	}
+
+      idx = t->opcode_modifier.vecesize;
+
+      if (i.types [src].bitfield.regzmm
+	  || (i.types [src].bitfield.regymm
+	      && t->opcode_modifier.broadcastonly == BROADCAST64BIT))
+	{
+	  swizzle = &op->swizzle->bits[idx].reg;
+
+	  switch (op->swizzle->type)
+	    {
+	    default:
+	      break;
+	    case register_swizzle:
+	      /* Don't allow {eh} with register swizzle on register
+		 source if it isn't the identity swizzle or static
+		 rounding is allowed.  */
+	      if (i.vec_ops.nt.eh
+		  && (swizzle->encode
+		      || !t->opcode_modifier.norounding))
+		{
+		  i.error = invalid_eh;
+		  return 1;
+		}
+
+	     /* Don't allow non-identity swizzle if the second
+		broadcast isn't allowed. */
+	      if (swizzle->encode
+		  && (t->opcode_modifier.broadcastonly
+		      == BROADCASTNOSECOND))
+		{
+		  i.error = invalid_vector_swizzle;
+		  return 1;
+		}
+
+	      break;
+	    }
+	}
+      else if (operand_type_check (i.types [src], vec_mem))
+	{
+	  if (t->opcode_modifier.broadcastonly
+	      && op->swizzle->type != memory_broadcast)
+	    {
+	      i.error = invalid_vector_swizzle;
+	      return 1;
+	    }
+
+	  if (t->opcode_modifier.broadcastonly == BROADCAST64BIT)
+	    {
+	      /* 64bit broadcast, {8to8}/{1to8}/{4to8}, is used on
+		 32bit element.  We need to decrement shift by 1.  */
+	      half_broadcast = 1;
+	      idx++;
+	    }
+
+	  switch (t->opcode_modifier.vectype)
+	    {
+	    case VECFP:
+	      swizzle = &op->swizzle->bits[idx].fp;
+	      break;
+	    case VECINT:
+	      swizzle = &op->swizzle->bits[idx].integer;
+	      break;
+	    default:
+	      abort ();
+	    }
+
+	  /* Check if the second broadcast is allowed. */
+	  if (t->opcode_modifier.broadcastonly == BROADCASTNOSECOND 
+	      && swizzle->encode == 1)
+	    {
+	      i.error = invalid_vector_swizzle;
+	      return 1;
+	    }
+	}
+      else
+	abort ();
+
+      if (swizzle->encode == -1)
+	{
+	  i.error = invalid_vector_swizzle;
+	  return 1;
+	}
+
+      i.vec.swizzle = swizzle->encode;
+      if (half_broadcast)
+	i.vec.shift = swizzle->shift - 1;
+      else
+	i.vec.shift = swizzle->shift;
+    }
+  else
+    {
+      if (i.types [src].bitfield.regzmm
+	  || (t->opcode_modifier.broadcastonly == BROADCAST64BIT
+	      && i.types [src].bitfield.regymm))
+	{
+	  /* Check of {eh} is allowed.  Don't allow naked {eh} on
+	     register source if static rounding is allowed.  */
+	  if (i.vec_ops.nt.eh
+	      && (t->opcode_modifier.noeh
+		  || !t->opcode_modifier.norounding))
+	    {
+	      i.error = invalid_eh;
+	      return 1;
+	    }
+
+	  if (!t->opcode_modifier.norounding)
+	    {
+	      /* Handle static rounding.  */
+	      if (i.vec_ops.nt.nt)
+		{
+		  int j = src - 1;
+
+		  gas_assert (i.vec_ops.nt.operand == src
+			      && j >= 0
+			      && i.vec_imms[j]);
+		  i.vec.swizzle = i.vec_imms[j]->imm;
+		  return 0;
+		}
+	    }
+	}
+      else if (!operand_type_check (i.types [src], vec_mem))
+	abort ();
+
+      /* Set the default swizzle if needed.  */
+      if (i.vec.swizzle == -1)
+	i.vec.swizzle = 0;
+    }
+
+  return 0;
+}
+
+/* Check operands for vector load/store instructions.  */
+
+static int
+check_VecMem (const insn_template *t)
+{
+  const struct Vec_Swizzle_Operation *op = NULL;
+  unsigned int type;
+
+  if (i.vec_ops.transform.swizzle)
+    {
+      /* Only one vector operation is allowed.  */
+      if (i.vec_ops.swizzle.swizzle)
+	return 1;
+      op = &i.vec_ops.transform;
+    }
+  else if (i.vec_ops.swizzle.swizzle)
+    op = &i.vec_ops.swizzle;
+
+  if (i.vec_ops.nt.eh && t->opcode_modifier.noeh)
+    {
+      i.error = invalid_eh;
+      return 1;
+    }
+
+  switch (t->opcode_modifier.vectype)
+    {
+    case VECFP:
+      /* Floating point.  */
+      type = 1;
+      break;
+    case VECINT:
+      /* Integer.  */
+      type = 0;
+      break;
+    default:
+      abort ();
+    }
+
+  if (op)
+    {
+      const struct Vec_Swizzle_Shift *swizzle;
+      unsigned int idx = t->opcode_modifier.vecesize;
+
+      if (t->opcode_modifier.noswizzle
+	  || (t->opcode_modifier.nobroadcast
+	      && op->swizzle->type == memory_broadcast))
+	return 1;
+
+      switch (t->opcode_modifier.vecmem)
+	{
+	case VECLOAD:
+	  swizzle = &op->swizzle->bits[idx].load[type];
+	  break;
+	case VECSTORE:
+	  swizzle = &op->swizzle->bits[idx].store[type];
+	  break;
+	default:
+	  abort ();
+	}
+
+      /* No broadcast with VSIB.  */
+      if (swizzle->encode == -1
+	  || (t->opcode_modifier.vecsib
+	      && op->swizzle->type == memory_broadcast))
+	return 1;
+
+      i.vec.swizzle = swizzle->encode;
+      /* Check invalid shift.  */
+      gas_assert (swizzle->shift != -1);
+      i.vec.shift = swizzle->shift + t->opcode_modifier.vecmemshift;
+    }
+  else
+    {
+      i.vec.swizzle = 0;
+      i.vec.shift = (t->opcode_modifier.vecmemshift
+		     + t->opcode_modifier.vecesize + 2);
+    }
+
+  return 0;
+}
+
+/* Check if operands are valid for a KNC instruction.  Update vector
+   operand types.  */
+
+static int
+check_mvex_operands (const insn_template *t)
+{
+  int op;
+
+  /* Without VSIB byte, we can't have a vector register for index.  */
+  if (!t->opcode_modifier.vecsib
+      && i.index_reg
+      && (i.index_reg->reg_type.bitfield.regxmm
+	  || i.index_reg->reg_type.bitfield.regymm
+	  || i.index_reg->reg_type.bitfield.regzmm))
+    {
+      i.error = unsupported_vector_index_register;
+      return 1;
+    }
+
+  /* For VSIB byte, we need a vector register for index and no PC
+     relative addressing is allowed.  */
+  if (t->opcode_modifier.vecsib
+      && (!i.index_reg
+	  || !((t->opcode_modifier.vecsib == VecSIB128
+		&& i.index_reg->reg_type.bitfield.regxmm)
+	       || (t->opcode_modifier.vecsib == VecSIB256
+		   && i.index_reg->reg_type.bitfield.regymm)
+	       || i.index_reg->reg_type.bitfield.regzmm)
+	  || (i.base_reg && i.base_reg->reg_num == RegRip)))
+    {
+      i.error = invalid_vsib_address;
+      return 1;
+    }
+
+  /* Check if vector operations are allowed.  */
+  if ((i.vec_ops.mask.mask
+       || i.vec_ops.transform.swizzle
+       || i.vec_ops.swizzle.swizzle)
+      && !t->opcode_modifier.vecop)
+    {
+      i.error = unsupported_vector_operation;
+      return 1;
+    }
+
+  /* Check {eh}.  EH may also have been turned on for static rounding
+     or SAE while trying an earlier template.  */
+  if (i.vec_ops.nt.nt
+      && (!i.vec_ops.nt.eh || !t->opcode_modifier.mvex))
+    {
+      i.error = invalid_eh;
+      return 1;
+    }
+
+  /* Initialize vector swizzle to -1.  */
+  i.vec.swizzle = -1;
+
+  /* For memory instructions, i.vec.shift depends on VecESize and
+     VecMemShift.  We will compute in check_VecMem.  For other
+     instructions with Vec_Disp8, default memory read size is 64byte
+     and shift is 6.  We initialize i.vec.shift to 6.  */
+  if (t->opcode_modifier.vecdisp8 && !t->opcode_modifier.vecmem)
+    {
+      /* 64bit broadcast, {8to8}/{1to8}/{4to8}, is used on 32bit
+	 element.  We need to decrement shift by 1.  */
+      if (t->opcode_modifier.broadcastonly == BROADCAST64BIT)
+	{
+	  gas_assert (t->opcode_modifier.vecesize == 0);
+	  i.vec.shift = 5;
+	}
+      else
+	i.vec.shift = 6;
+    }
+  else
+    i.vec.shift = -1;
+
+  /* Check static rounding and SAE operands.  */
+  for (op = i.operands; --op >= 0;)
+    {
+      if (i.vec_imms [op])
+	{
+	  unsigned int j;
+
+	  /* Only the first 2 operands in vector instructions can have
+	     Imm constants.  */
+	  if (op > 1 || !t->opcode_modifier.vectype)
+	    {
+	      i.error = invalid_vector_immediate_operand;
+	      return 1;
+	    }
+
+	  if (!t->operand_types[op].bitfield.imm2)
+	    return 1;
+
+	  switch (i.vec_imms [op]->type)
+	    {
+	    case sae:
+	      if (t->opcode_modifier.norounding)
+		{
+		  if (t->opcode_modifier.saeonly)
+		    i.vec.swizzle = 0x4;
+		  else
+		    {
+		      i.error = no_supress_all_exceptions;
+		      return 1;
+		    }
+		}
+	      /* Turn on {eh} for SAE.  */
+	      i.vec_ops.nt.nt = 1;
+	      j = op + 1;
+	      /* Check the 8bit immediate operand.  */
+	      if (t->operand_types[j].bitfield.imm8)
+		j++;
+	      i.vec_ops.nt.operand = j;
+	      gas_assert (j < i.operands
+			  && i.types [j].bitfield.regzmm);
+	      continue;
+	    case rounding:
+	      /* Check if static rounding is allowed.  */
+	      if (t->opcode_modifier.norounding)
+		{
+		  i.error = no_static_rounding;
+		  return 1;
+		}
+	      /* Turn on {eh} for static rounding.  */
+	      i.vec_ops.nt.nt = 1;
+	      j = op + 1;
+	      i.vec_ops.nt.operand = j;
+	      gas_assert (j < i.operands
+			  && i.types [j].bitfield.regzmm);
+	      continue;
+	    default:
+	      abort ();
+	    }
+	}
+
+      /* Imm2 operands have to be static rounding or SAE.  */
+      if (operand_type_check (t->operand_types [op], vec_imm))
+	return 1;
+    }
+
+  /* Since there are no invalid vector constants nor invalid vector
+     operations,  There is no need to check further if it isn't an
+     instruction with vector operations or vector 8bit displacement.  */
+  if (!t->opcode_modifier.vecop)
+    {
+      if (t->opcode_modifier.vecdisp8)
+	{
+	  /* Scalar instructions with vector 8bit displacement.  */
+	  gas_assert (i.vec.swizzle == -1);
+	  i.vec.swizzle = 0 ;
+	}
+      else
+	return 0;
+    }
+
+  /* Check if default mask is allowed.  */
+  if (t->opcode_modifier.nodefmask
+      && (!i.vec_ops.mask.mask || i.vec_ops.mask.mask->reg_num == 0))
+    {
+      i.error = no_default_mask;
+      return 1;
+    }
+
+  if (t->opcode_modifier.vecop)
+    {
+      /* Normal vector instructions:
+
+	 2 operands:
+	      vop s(v/m), v{k}
+	 3 operands:
+	   a. vop s(v/m), v, v{k}
+	   b. vop s(v/m), k, v{k}
+	   c. vop rc, s(v/m), v{k}
+	 4 operands:
+	      vop rc, s(v/m), v, v{k}
+	      vop imm8, s(v/m), v, v{k}
+	      vcmp sae, s(v/m), v, k{k}
+	 5 operands:
+	      vcmp sae, imm8, s(v/m), v, k{k}
+
+	 Memory vector instructions:
+
+	 1 operand:
+	      vop vsib{k}
+	 2 operands:
+	      vop s(v/m), v/m{k}
+       */
+
+      int src = -1, dest = -1;
+
+      switch (t->operands)
+	{
+	case 1:
+	  gas_assert (t->opcode_modifier.vecsib);
+	  src = dest = 0;
+	  break;
+
+	case 2:
+	  src = 0;
+	  dest = 1;
+	  break;
+
+	case 3:
+	  switch (i.imm_operands)
+	    {
+	    case 0:
+	    case 1:
+	      src = i.imm_operands;
+	      break;
+	    default:
+	      abort ();
+	      break;
+	    }
+	  dest = 2;
+	  break;
+
+	case 4:
+	  switch (i.imm_operands)
+	    {
+	    case 1:
+	    case 2:
+	      src = i.imm_operands;
+	      break;
+	    default:
+	      abort ();
+	      break;
+	    }
+	  dest = 3;
+	  break;
+
+	case 5:
+	  switch (i.imm_operands)
+	    {
+	    case 2:
+	      src = i.imm_operands;
+	      break;
+	    default:
+	      abort ();
+	      break;
+	    }
+	  dest = 4;
+	  break;
+
+	default:
+	  abort ();
+	  break;
+	}
+
+      gas_assert (src != -1 && dest != -1);
+
+      if (t->opcode_modifier.vecmem)
+	{
+	  if (check_VecMem (t))
+	    return 1;
+	}
+      else if (check_VecNorm (t, src))
+	return 1;
+
+      /* Mask operation must be on the destination operand.  */
+      if (i.vec_ops.mask.mask
+	  && i.vec_ops.mask.operand != dest)
+	{
+	  i.error = mask_not_on_destination;
+	  return 1;
+	}
+
+      /* NT operation must be on the memory operand.  */
+	if (i.vec_ops.nt.nt)
+	  {
+	    int mem = t->opcode_modifier.vecmem == VECSTORE ? dest : src;
+	    if (i.vec_ops.nt.operand != mem)
+	      {
+		i.error = eh_not_on_memory_operand;
+		return 1;
+	      }
+	  }
+
+      /* Swizzle/tranform operation must be on the source operand.  */
+      if ((i.vec_ops.transform.swizzle
+	   && i.vec_ops.transform.operand != src)
+	  || (i.vec_ops.swizzle.swizzle
+	      && i.vec_ops.swizzle.operand != src))
+	{
+	  i.error = vector_swizzle_tranformation_not_on_source;
+	  return 1;
+	}
+    }
+
+  /* Check vector Disp8 operand last since it needs i.vec.shift.  */
+  if (t->opcode_modifier.vecdisp8)
+    {
+      for (op = i.operands; --op >= 0;)
+	if (operand_type_check (i.types[op], disp)
+	    && i.op[op].disps->X_op == O_constant)
+	  {
+	    offsetT value = i.op[op].disps->X_add_number;
+	    int vec_disp8_ok = fits_in_mvex_disp8 (value);
+	    if (t->operand_types [op].bitfield.vec_disp8)
+	      {
+		if (vec_disp8_ok)
+		  i.types[op].bitfield.vec_disp8 = 1;
+		else
+		  {
+		    /* Vector insn can only have Vec_Disp8/Disp32 in
+		       32/64bit modes, and Vec_Disp8/Disp16 in 16bit
+		       mode.  */
+		    i.types[op].bitfield.disp8 = 0;
+		    if (flag_code != CODE_16BIT)
+		      i.types[op].bitfield.disp16 = 0;
+		  }
+	      }
+	    else if (flag_code != CODE_16BIT)
+	      {
+		/* One form of this instruction supports vector Disp8.
+		   Try vector Disp8 if we need to use Disp32.  */
+		if (vec_disp8_ok && !fits_in_signed_byte (value))
+		  {
+		    i.error = try_vector_disp8;
+		    return 1;
+		  }
+	      }
+	  }
+      }
+
+  return 0;
+}
+
+/* Check if operands are valid for the instruction.  Update VEX
+   operand types.  */
+
 /* Check if operands are valid for the instruction.  */
 
 static int
 check_VecOperands (const insn_template *t)
 {
   unsigned int op;
+
+  /* KNC has its own vector operand syntax and encoding.  */
+  if (cpu_arch_flags.bitfield.cpuk1omni)
+    {
+      int ret = check_mvex_operands (t);
+      i.memshift = i.vec.shift;
+      return ret;
+    }
 
   /* Without VSIB byte, we can't have a vector register for index.  */
   if (!t->opcode_modifier.vecsib
@@ -4596,8 +5789,8 @@ check_VecOperands (const insn_template *t)
 static int
 VEX_check_operands (const insn_template *t)
 {
-  /* VREX is only valid with EVEX prefix.  */
-  if (i.need_vrex && !t->opcode_modifier.evex)
+  /* VREX is only valid with EVEX or MVEX prefix.  */
+  if (i.need_vrex && !t->opcode_modifier.evex && !t->opcode_modifier.mvex)
     {
       i.error = invalid_register_operand;
       return 1;
@@ -5028,6 +6221,39 @@ check_reverse:
 	  break;
 	case invalid_register_operand:
 	  err_msg = _("invalid register operand");
+	  break;
+	case too_many_vector_swizzle:
+	  err_msg = _("too many vector swizzle");
+	  break;
+	case no_vector_swizzle:
+	  err_msg = _("no vector swizzle");
+	  break;
+	case no_vector_broadcast:
+	  err_msg = _("no vector broadcast");
+	  break;
+	case no_static_rounding:
+	  err_msg = _("no static rounding");
+	  break;
+	case no_supress_all_exceptions:
+	  err_msg = _("no supress all exceptions");
+	  break;
+	case invalid_vector_immediate_operand:
+	  err_msg = _("invalid vector immediate operand");
+	  break;
+	case invalid_vector_swizzle:
+	  err_msg = _("invalid vector swizzle");
+	  break;
+	case vector_swizzle_tranformation_not_on_source:
+	  err_msg = _("vector swizzle/tranformation not on source operand");
+	  break;
+	case eh_not_on_memory_operand:
+	  err_msg = _("{eh} not on memory operand");
+	  break;
+	case unsupported_vector_operation:
+	  err_msg = _("unsupported vector operation");
+	  break;
+	case invalid_eh:
+	  err_msg = _("invalid {eh}");
 	  break;
 	}
       as_bad (_("%s for `%s'"), err_msg,
@@ -6149,6 +7375,23 @@ build_modrm_byte (void)
 	      else
 		abort ();
 	    }
+	  else if (i.tm.opcode_modifier.mvex)
+	    {
+	      /* For MVEX instructions, when there are 5 operands, the
+		 first one must be immediate operand.  If the second
+		 one is immediate operand, the source operand is the 3th
+		 one.  If the last one is immediate operand, the source
+		 operand is the 2nd one.  */
+	      gas_assert (i.imm_operands == 2
+			  && i.tm.opcode_modifier.saeonly
+			  && operand_type_check (i.types[0], imm));
+	      if (operand_type_check (i.types[1], imm))
+		source = 2;
+	      else if (operand_type_check (i.types[4], imm))
+		source = 1;
+	      else
+		abort ();
+	    }
 	  break;
 	default:
 	  abort ();
@@ -6558,6 +7801,14 @@ build_modrm_byte (void)
 		i.rex |= REX_B;
 	    }
 	}
+      else if (i.tm.opcode_modifier.jump
+	       && i.tm.opcode_modifier.vex)
+	{
+	  /* VEX branch instructions.  */
+	  gas_assert (i.reg_operands == 1
+		      && i.types[1].bitfield.regmask);
+	  i.vex.register_specifier = i.op[1].regs;
+	}
       /* Fill in i.rm.reg or i.rm.regmem field with register operand
 	 (if any) based on i.tm.extension_opcode.  Again, we must be
 	 careful to make sure that segment/control/debug/test/MMX
@@ -6626,6 +7877,12 @@ build_modrm_byte (void)
 		  /* There is no memory operand.  */
 		  gas_assert ((op + 2) == i.operands);
 		  vex_reg = op + 1;
+		}
+	      else if (i.tm.opcode_modifier.mvex)
+		{
+		  /* The register destination is the last operand.  */
+		  gas_assert ((op + 1) == i.operands);
+		  vex_reg = op;
 		}
 	      else
 		{
@@ -6730,7 +7987,9 @@ output_branch (void)
       i.prefixes -= 1;
     }
 
-  if (i.prefixes != 0 && !intel_syntax)
+  if (i.prefixes != 0
+      && (!intel_syntax
+	  || i.tm.opcode_modifier.vex))
     as_warn (_("skipping prefixes on this instruction"));
 
   /* It's always a symbol;  End frag & setup for relax.
@@ -6738,24 +7997,44 @@ output_branch (void)
      instruction we may generate in md_convert_frag.  This is 2
      bytes for the opcode and room for the prefix and largest
      displacement.  */
-  frag_grow (prefix + 2 + 4);
-  /* Prefix and 1 opcode byte go in fr_fix.  */
-  p = frag_more (prefix + 1);
-  if (i.prefix[DATA_PREFIX] != 0)
-    *p++ = DATA_PREFIX_OPCODE;
-  if (i.prefix[SEG_PREFIX] == CS_PREFIX_OPCODE
-      || i.prefix[SEG_PREFIX] == DS_PREFIX_OPCODE)
-    *p++ = i.prefix[SEG_PREFIX];
-  if (i.prefix[REX_PREFIX] != 0)
-    *p++ = i.prefix[REX_PREFIX];
-  *p = i.tm.base_opcode;
+  if (i.tm.opcode_modifier.vex)
+    {
+      unsigned int j;
 
-  if ((unsigned char) *p == JUMP_PC_RELATIVE)
-    subtype = ENCODE_RELAX_STATE (UNCOND_JUMP, size);
-  else if (cpu_arch_flags.bitfield.cpui386)
-    subtype = ENCODE_RELAX_STATE (COND_JUMP, size);
+      /* Make room for VEX prefex + 1byte opcode + 4byte offset.  */
+      frag_grow (i.vex.length + 1 + 4);
+
+      /* Now the VEX prefix.  */
+      p = frag_more (i.vex.length + 1);
+      for (j = 0; j < i.vex.length; j++)
+	p[j] = i.vex.bytes[j];
+
+      p += j;
+      *p = i.tm.base_opcode;
+
+      subtype = ENCODE_RELAX_STATE (COND_JUMPVEX, size);
+    }
   else
-    subtype = ENCODE_RELAX_STATE (COND_JUMP86, size);
+    {
+      frag_grow (prefix + 2 + 4);
+      /* Prefix and 1 opcode byte go in fr_fix.  */
+      p = frag_more (prefix + 1);
+      if (i.prefix[DATA_PREFIX] != 0)
+	*p++ = DATA_PREFIX_OPCODE;
+      if (i.prefix[SEG_PREFIX] == CS_PREFIX_OPCODE
+	  || i.prefix[SEG_PREFIX] == DS_PREFIX_OPCODE)
+	*p++ = i.prefix[SEG_PREFIX];
+      if (i.prefix[REX_PREFIX] != 0)
+	*p++ = i.prefix[REX_PREFIX];
+      *p = i.tm.base_opcode;
+
+      if ((unsigned char) *p == JUMP_PC_RELATIVE)
+	subtype = ENCODE_RELAX_STATE (UNCOND_JUMP, size);
+      else if (cpu_arch_flags.bitfield.cpui386)
+	subtype = ENCODE_RELAX_STATE (COND_JUMP, size);
+      else
+	subtype = ENCODE_RELAX_STATE (COND_JUMP86, size);
+    }
   subtype |= code16;
 
   sym = i.op[0].disps->X_add_symbol;
@@ -6959,9 +8238,10 @@ output_insn (void)
 	  i.prefix[LOCK_PREFIX] = 0;
 	}
 
-      /* Since the VEX/EVEX prefix contains the implicit prefix, we
+      /* Since the VEX/EVEX/MVEX prefix contains the implicit prefix, we
 	 don't need the explicit prefix.  */
-      if (!i.tm.opcode_modifier.vex && !i.tm.opcode_modifier.evex)
+      if (!i.tm.opcode_modifier.vex && !i.tm.opcode_modifier.evex
+	  && !i.tm.opcode_modifier.mvex)
 	{
 	  switch (i.tm.opcode_length)
 	    {
@@ -7278,6 +8558,10 @@ output_imm (fragS *insn_start_frag, offsetT insn_start_off)
     {
       /* Skip SAE/RC Imm operand in EVEX.  They are already handled.  */
       if (i.rounding && (int) n == i.rounding->operand)
+	continue;
+
+      /* Static rounding and SAE are encoded in the MVEX prefix.  */
+      if (i.vec_imms [n])
 	continue;
 
       if (operand_type_check (i.types[n], imm))
@@ -7782,12 +9066,117 @@ pe_directive_secrel (int dummy ATTRIBUTE_UNUSED)
 
 /* Handle Vector operations.  */
 
+/* Handle KNC vector operations.  */
+
+static char *
+check_mvex_operations (char *op_string, char *op_end)
+{
+  const struct Vec_Swizzle *swizzle;
+  const reg_entry *mask;
+  int j;
+  const char *saved;
+  char *end_op;
+
+  while (*op_string
+	 && (op_end == NULL || op_string < op_end))
+    {
+      /* Check {eh}. */
+      if (strncasecmp (op_string, "{eh}", 4) == 0)
+	{
+	  if (i.vec_ops.nt.eh)
+	    {
+	      as_bad (_("Duplicated `%s'"), op_string);
+	      return NULL;
+	    }
+
+	  i.vec_ops.nt.nt = 1;
+	  i.vec_ops.nt.eh = 1;
+	  i.vec_ops.nt.operand = this_operand;
+	  op_string += 4;
+	  continue;
+	}
+
+      /* Since there are at most 2 different operations, we check it
+	 twice.   */
+      swizzle = Vec_SwizzleTable;
+      for (j = ARRAY_SIZE (Vec_SwizzleTable); j; j--, swizzle++)
+	if (strncasecmp (op_string, swizzle->name, swizzle->len) == 0)
+	  {
+	    if (swizzle->type == transform_swizzle)
+	      {
+		if (i.vec_ops.transform.swizzle == NULL)
+		  {
+		    i.vec_ops.transform.swizzle = swizzle;
+		    i.vec_ops.transform.operand = this_operand;
+		  }
+		else
+		  goto duplicated;
+	      }
+	    else if (i.vec_ops.swizzle.swizzle == NULL)
+	      {
+		i.vec_ops.swizzle.swizzle = swizzle;
+		i.vec_ops.swizzle.operand = this_operand;
+	      }
+	    else
+	      {
+duplicated:
+		as_bad (_("duplicated `%s'"), op_string);
+		return NULL;
+	      }
+	    op_string += swizzle->len;
+	    break;
+	  }
+
+      if (j)
+	continue;
+
+      /* Check mask register.  */
+      if (*op_string == '{'
+	  && (mask = parse_register (op_string + 1, &end_op)) != NULL)
+	{
+	  /* k0 can't be used for write mask.  */
+	  if (mask->reg_num == 0)
+	    {
+	      as_bad (_("`%s' can't be used for write mask"), op_string);
+	      return NULL;
+	    }
+
+	  if (i.vec_ops.mask.mask)
+	    goto duplicated;
+
+	  i.vec_ops.mask.mask = mask;
+	  i.vec_ops.mask.operand = this_operand;
+
+	  saved = op_string;
+	  op_string = end_op;
+	  if (is_space_char (*op_string))
+	    ++op_string;
+	  if (*op_string != '}')
+	    {
+	      as_bad (_("missig `}' in `%s'"), saved);
+	      return NULL;
+	    }
+	  ++op_string;
+	  continue;
+	}
+
+      /* We don't know this one.  */
+      as_bad (_("unknown vector operation: `%s'"), op_string);
+      return NULL;
+    }
+
+  return op_string;
+}
+
 static char *
 check_VecOperations (char *op_string, char *op_end)
 {
   const reg_entry *mask;
   const char *saved;
   char *end_op;
+
+  if (cpu_arch_flags.bitfield.cpuk1omni)
+    return check_mvex_operations (op_string, op_end);
 
   while (*op_string
 	 && (op_end == NULL || op_string < op_end))
@@ -8484,6 +9873,90 @@ bad_address:
 
 /* Handle vector immediates.  */
 
+/* It is called to check the maximum number of immediate operands
+   only after a vector immediate.  We can't check it first since
+   Vec_immediate () may be called on non-immediate operands.  */
+
+static int
+Vec_maximum_immediate (void)
+{
+  if (i.imm_operands == MAX_IMMEDIATE_OPERANDS)
+    {
+      as_bad (_("at most %d immediate operands are allowed"),
+	      MAX_IMMEDIATE_OPERANDS);
+      return 1;
+    }
+
+  return 0;
+}
+
+/* Record a vector immediate operand.  */
+
+static void
+Vec_record_immediate (const struct Vec_Immediate *vimm)
+{
+  expressionS *exp;
+
+  exp = &im_expressions[i.imm_operands++];
+  i.op[this_operand].imms = exp;
+
+  exp->X_op = O_constant;
+  exp->X_add_number = vimm->imm;
+  exp->X_add_symbol = (symbolS *) 0;
+  exp->X_op_symbol = (symbolS *) 0;
+
+  /* We will set proper ImmN in check_VecOperands.  */
+  i.types[this_operand].bitfield.imm8 = 1;
+  i.types[this_operand].bitfield.imm16 = 1;
+  i.types[this_operand].bitfield.imm32 = 1;
+  i.types[this_operand].bitfield.imm32s = 1;
+}
+
+static int
+Vec_immediate_table (const char *imm_start,
+		     const struct Vec_Immediate *vimm, int size)
+{
+  for (; size; size--, vimm++)
+    if (strcasecmp (imm_start, vimm->name) == 0)
+      {
+	if (Vec_maximum_immediate ())
+	  return 0;
+
+	i.vec_imms [this_operand] = vimm;
+	Vec_record_immediate (vimm);
+	return 1;
+      }
+
+  return 0;
+}
+
+/* Handle vector immediates.  */
+
+static int
+Vec_immediate (const char *imm_start)
+{
+  if (!cpu_arch_flags.bitfield.cpuk1omni)
+    return 0;
+
+  if (allow_naked_reg)
+    {
+      /* Check optional vector immediates without "{}".  */
+      if (Vec_immediate_table (imm_start, Vec_ImmediateTable_Naked,
+			       ARRAY_SIZE (Vec_ImmediateTable_Naked)))
+	return 1;
+    }
+
+  /* No need to check if it doesn't start with `{'.  */
+  if (*imm_start != '{')
+    return 0;
+
+  if (Vec_immediate_table (imm_start, Vec_ImmediateTable,
+			   ARRAY_SIZE (Vec_ImmediateTable)))
+    return 1;
+
+  return 0;
+}
+
 static int
 RC_SAE_immediate (const char *imm_start)
 {
@@ -8662,6 +10135,11 @@ i386_att_operand (char *operand_string)
 	}
       if (!i386_immediate (op_string))
 	return 0;
+    }
+  else if (Vec_immediate (operand_string))
+    {
+      /* If it is a vector immediate, do nothing.  */
+      ;
     }
   else if (RC_SAE_immediate (operand_string))
     {
@@ -8956,7 +10434,7 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
       int size = (fragP->fr_subtype & CODE16) ? 2 : 4;
       enum bfd_reloc_code_real reloc_type;
       unsigned char *opcode;
-      int old_fr_fix;
+      int old_fr_fix, delta;
 
       if (fragP->fr_var != NO_RELOC)
 	reloc_type = (enum bfd_reloc_code_real) fragP->fr_var;
@@ -9002,6 +10480,7 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	  /* Fall through.  */
 
 	case COND_JUMP:
+	case COND_JUMPVEX:
 	  if (no_cond_jump_promotion && fragP->fr_var == NO_RELOC)
 	    {
 	      fixS *fixP;
@@ -9015,13 +10494,32 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	      break;
 	    }
 
-	  /* This changes the byte-displacement jump 0x7N
-	     to the (d)word-displacement jump 0x0f,0x8N.  */
-	  opcode[1] = opcode[0] + 0x10;
-	  opcode[0] = TWO_BYTE_OPCODE_ESCAPE;
-	  /* We've added an opcode byte.  */
-	  fragP->fr_fix += 1 + size;
-	  fix_new (fragP, old_fr_fix + 1, size,
+	  if (TYPE_FROM_RELAX_STATE (fragP->fr_subtype)
+	      == COND_JUMPVEX)
+	    {
+	      /* Change 3byte VEX C4 7N opcode to 2byte VEX C5 0F8N
+		 opcode for VEX branch instructions.  */
+	      gas_assert (opcode[-3] == 0xc4
+			  && opcode[-2] == 0xe0
+			  && (opcode[-1] & 0xc0) == 0x40);
+	      opcode[-3] = 0xc5;
+	      opcode[-2] = opcode[-1] | 0x80;
+	      opcode[-1] = opcode[0] + 0x10;
+	      /* We've removed a VEX prefix byte.  */
+	      delta = -1;
+	    }
+	  else
+	    {
+	      /* Change the byte-displacement jump 0x7N to the
+		 (d)word-displacement jump 0x0f,0x8N.  */
+	      opcode[1] = opcode[0] + 0x10;
+	      opcode[0] = TWO_BYTE_OPCODE_ESCAPE;
+	      /* We've added an opcode byte.  */
+	      delta = 1;
+	    }
+
+	  fragP->fr_fix += delta + size;
+	  fix_new (fragP, old_fr_fix + delta, size,
 		   fragP->fr_symbol,
 		   fragP->fr_offset, 1,
 		   reloc_type);
@@ -9110,11 +10608,37 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT sec ATTRIBUTE_UNUSED,
 	  where_to_put_displacement = &opcode[2];
 	  break;
 
+	case ENCODE_RELAX_STATE (COND_JUMPVEX, BIG):
+	  gas_assert (opcode[-3] == 0xc4
+		       && opcode[-2] == 0xe0
+		       && (opcode[-1] & 0xc0) == 0x40);
+	  /* -1 VEX prefix + 4 displacement  */
+	  extension = 3;
+	  opcode[-3] = 0xc5;
+	  opcode[-2] = opcode[-1] | 0x80;
+	  opcode[-1] = opcode[0] + 0x10;
+	  where_to_put_displacement = &opcode[0];
+	  break;
+
 	case ENCODE_RELAX_STATE (COND_JUMP, BIG16):
 	  extension = 3;		/* 2 opcode + 2 displacement  */
 	  opcode[1] = opcode[0] + 0x10;
 	  opcode[0] = TWO_BYTE_OPCODE_ESCAPE;
 	  where_to_put_displacement = &opcode[2];
+	  break;
+
+	case ENCODE_RELAX_STATE (COND_JUMPVEX, BIG16):
+	  gas_assert (((opcode - 3)
+		       >= (unsigned char *) fragP->fr_literal)
+		       && opcode[-3] == 0xc4
+		       && opcode[-2] == 0xe0
+		       && (opcode[-1] & 0xc0) == 0x40);
+	  /* -1 VEX prefix + 2 displacement  */
+	  extension = 1;
+	  opcode[-3] = 0xc5;
+	  opcode[-2] = opcode[-1] | 0x80;
+	  opcode[-1] = opcode[0] + 0x10;
+	  where_to_put_displacement = &opcode[0];
 	  break;
 
 	case ENCODE_RELAX_STATE (COND_JUMP86, BIG16):
@@ -9451,11 +10975,16 @@ parse_real_register (char *reg_string, char **end_op)
   if (r->reg_type.bitfield.regxmm && !cpu_arch_flags.bitfield.cpusse)
     return (const reg_entry *) NULL;
 
-  if (r->reg_type.bitfield.regymm && !cpu_arch_flags.bitfield.cpuavx)
+  /* Support YMM register source operand with K1OM vcvtdq2pd, vcvtps2pd
+     and vcvtudq2pd.  */
+  if (r->reg_type.bitfield.regymm
+      && !cpu_arch_flags.bitfield.cpuavx
+      && !cpu_arch_flags.bitfield.cpuk1omni)
     return (const reg_entry *) NULL;
 
   if ((r->reg_type.bitfield.regzmm || r->reg_type.bitfield.regmask)
-       && !cpu_arch_flags.bitfield.cpuavx512f)
+       && !cpu_arch_flags.bitfield.cpuavx512f
+       && !cpu_arch_flags.bitfield.cpuk1omni)
     return (const reg_entry *) NULL;
 
   /* Don't allow fake index register unless allow_index_reg isn't 0. */
@@ -9467,7 +10996,8 @@ parse_real_register (char *reg_string, char **end_op)
      mode.  */
   if ((r->reg_flags & RegVRex))
     {
-      if (!cpu_arch_flags.bitfield.cpuvrex
+      if ((!cpu_arch_flags.bitfield.cpuvrex
+	   && !cpu_arch_flags.bitfield.cpuk1omni)
 	  || flag_code != CODE_64BIT)
 	return (const reg_entry *) NULL;
 
