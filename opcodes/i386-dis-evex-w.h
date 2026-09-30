@@ -533,4 +533,4 @@
   {
     { "vbitrevb", { XM, EXx }, NO_PREFIX },
     { Bad_Opcode }
-  }
+  },
