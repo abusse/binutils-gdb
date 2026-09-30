@@ -1,4 +1,3 @@
-#source: x86_64.s
 #as: -J -march=k1om
 #objdump: -dw
 #name: k1om
@@ -157,8 +156,6 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	66 89 04 25 11 22 33 ff 	mov    %ax,0xffffffffff332211
 [ 	]*[a-f0-9]+:	89 04 25 11 22 33 ff 	mov    %eax,0xffffffffff332211
 [ 	]*[a-f0-9]+:	48 89 04 25 11 22 33 ff 	mov    %rax,0xffffffffff332211
-[ 	]*[a-f0-9]+:	48 0f c7 08          	cmpxchg16b \(%rax\)
-[ 	]*[a-f0-9]+:	48 0f c7 08          	cmpxchg16b \(%rax\)
 [ 	]*[a-f0-9]+:	66 0f be f0          	movsbw %al,%si
 [ 	]*[a-f0-9]+:	0f be f0             	movsbl %al,%esi
 [ 	]*[a-f0-9]+:	48 0f be f0          	movsbq %al,%rsi
@@ -210,10 +207,6 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	66 0f b6 10          	movzbw \(%rax\),%dx
 [ 	]*[a-f0-9]+:	0f b7 10             	movzwl \(%rax\),%edx
 [ 	]*[a-f0-9]+:	48 0f b7 10          	movzwq \(%rax\),%rdx
-[ 	]*[a-f0-9]+:	f3 0f 7e 0c 24       	movq   \(%rsp\),%xmm1
-[ 	]*[a-f0-9]+:	f3 0f 7e 0c 24       	movq   \(%rsp\),%xmm1
-[ 	]*[a-f0-9]+:	66 0f d6 0c 24       	movq   %xmm1,\(%rsp\)
-[ 	]*[a-f0-9]+:	66 0f d6 0c 24       	movq   %xmm1,\(%rsp\)
 [ 	]*[a-f0-9]+:	df e0                	fnstsw %ax
 [ 	]*[a-f0-9]+:	df e0                	fnstsw %ax
 [ 	]*[a-f0-9]+:	9b df e0             	fstsw  %ax
@@ -240,10 +233,6 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	48 0f b6 10          	movzbq \(%rax\),%rdx
 [ 	]*[a-f0-9]+:	0f b7 10             	movzwl \(%rax\),%edx
 [ 	]*[a-f0-9]+:	48 0f b7 10          	movzwq \(%rax\),%rdx
-[ 	]*[a-f0-9]+:	0f c3 00             	movnti %eax,\(%rax\)
-[ 	]*[a-f0-9]+:	0f c3 00             	movnti %eax,\(%rax\)
-[ 	]*[a-f0-9]+:	48 0f c3 00          	movnti %rax,\(%rax\)
-[ 	]*[a-f0-9]+:	48 0f c3 00          	movnti %rax,\(%rax\)
 [ 	]*[a-f0-9]+:	66 0f be 00          	movsbw \(%rax\),%ax
 [ 	]*[a-f0-9]+:	0f be 00             	movsbl \(%rax\),%eax
 [ 	]*[a-f0-9]+:	0f bf 00             	movswl \(%rax\),%eax
@@ -254,6 +243,4 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	0f b6 00             	movzbl \(%rax\),%eax
 [ 	]*[a-f0-9]+:	0f b7 00             	movzwl \(%rax\),%eax
 [ 	]*[a-f0-9]+:	48 0f b7 00          	movzwq \(%rax\),%rax
-[ 	]*[a-f0-9]+:	0f c3 00             	movnti %eax,\(%rax\)
-[ 	]*[a-f0-9]+:	48 0f c3 00          	movnti %rax,\(%rax\)
 #pass

@@ -95,7 +95,7 @@ Contents of the .eh_frame section:
   DW_CFA_undefined: r16 \(rip\)
   DW_CFA_nop
 
-000000e8 000000c[8c] 00000018 FDE cie=000000d4 pc=00000058..00000097
+000000e8 000000e[48] 00000018 FDE cie=000000d4 pc=00000058..000000a0
   DW_CFA_advance_loc: 1 to 00000059
   DW_CFA_undefined: r0 \(rax\)
   DW_CFA_advance_loc: 1 to 0000005a
@@ -220,5 +220,23 @@ Contents of the .eh_frame section:
   DW_CFA_undefined: r47 \(mm6\)
   DW_CFA_advance_loc: 1 to 00000096
   DW_CFA_undefined: r48 \(mm7\)
+  DW_CFA_advance_loc: 1 to 00000097
+  DW_CFA_undefined: r126 \(vxcsr\)
+  DW_CFA_advance_loc: 1 to 00000098
+  DW_CFA_undefined: r118 \(k0\)
+  DW_CFA_advance_loc: 1 to 00000099
+  DW_CFA_undefined: r119 \(k1\)
+  DW_CFA_advance_loc: 1 to 0000009a
+  DW_CFA_undefined: r120 \(k2\)
+  DW_CFA_advance_loc: 1 to 0000009b
+  DW_CFA_undefined: r121 \(k3\)
+  DW_CFA_advance_loc: 1 to 0000009c
+  DW_CFA_undefined: r122 \(k4\)
+  DW_CFA_advance_loc: 1 to 0000009d
+  DW_CFA_undefined: r123 \(k5\)
+  DW_CFA_advance_loc: 1 to 0000009e
+  DW_CFA_undefined: r124 \(k6\)
+  DW_CFA_advance_loc: 1 to 0000009f
+  DW_CFA_undefined: r125 \(k7\)
   DW_CFA_nop
 #pass
