@@ -453,6 +453,17 @@ x86_fill_gregset (struct regcache *regcache, void *buf)
   int i;
 
 #ifdef __x86_64__
+#ifdef __KNC__
+  /* The k1om tdesc numbers the vector unit where amd64 has orig_rax and
+     the segment bases.  */
+  int st0_regnum = find_regno (regcache->tdesc, "st0");
+  for (i = 0; i < st0_regnum; i++)
+    collect_register (regcache, i, ((char *) buf) + x86_64_regmap[i]);
+  collect_register_by_name (regcache, "orig_rax", (char *) buf + ORIG_RAX * 8);
+  collect_register_by_name (regcache, "fs_base", (char *) buf + 21 * 8);
+  collect_register_by_name (regcache, "gs_base", (char *) buf + 22 * 8);
+  return;
+#endif
   if (register_size (regcache->tdesc, 0) == 8)
     {
       for (i = 0; i < X86_64_NUM_REGS; i++)
@@ -477,6 +488,16 @@ x86_store_gregset (struct regcache *regcache, const void *buf)
   int i;
 
 #ifdef __x86_64__
+#ifdef __KNC__
+  int st0_regnum = find_regno (regcache->tdesc, "st0");
+  for (i = 0; i < st0_regnum; i++)
+    supply_register (regcache, i, ((const char *) buf) + x86_64_regmap[i]);
+  supply_register_by_name (regcache, "orig_rax",
+			   (const char *) buf + ORIG_RAX * 8);
+  supply_register_by_name (regcache, "fs_base", (const char *) buf + 21 * 8);
+  supply_register_by_name (regcache, "gs_base", (const char *) buf + 22 * 8);
+  return;
+#endif
   if (register_size (regcache->tdesc, 0) == 8)
     {
       for (i = 0; i < X86_64_NUM_REGS; i++)
@@ -533,14 +554,40 @@ x86_store_fpxregset (struct regcache *regcache, const void *buf)
 static void
 x86_fill_xstateregset (struct regcache *regcache, void *buf)
 {
+#ifdef __KNC__
+  i387_cache_to_k1om_vpu (regcache, buf);
+#else
   i387_cache_to_xsave (regcache, buf);
+#endif
 }
 
 static void
 x86_store_xstateregset (struct regcache *regcache, const void *buf)
 {
+#ifdef __KNC__
+  i387_k1om_vpu_to_cache (regcache, buf);
+#else
   i387_xsave_to_cache (regcache, buf);
+#endif
 }
+
+#ifdef __KNC__
+/* Whether the kernel exports the KNC vector unit through NT_X86_XSTATE.
+   VXCSR.DUE is always set on the hardware; kernels without that support
+   return zeros there and must not be written to with PTRACE_SETREGSET.  */
+
+static bool
+x86_knc_vpu_regset_p (int tid)
+{
+  unsigned char buf[K1OM_XSTATE_SIZE] = {};
+  struct iovec iov = { buf, sizeof (buf) };
+
+  if (ptrace (PTRACE_GETREGSET, tid, (unsigned int) NT_X86_XSTATE,
+	      (long) &iov) < 0)
+    return false;
+  return (buf[576 + 32 * 64 + 16 + 2] & 0x20) != 0;
+}
+#endif
 
 /* ??? The non-biarch i386 case stores all the i387 regs twice.
    Once in i387_.*fsave.* and once in i387_.*fxsave.*.
@@ -901,7 +948,12 @@ x86_linux_read_description ()
   if (have_ptrace_getregset_was_unknown
       && have_ptrace_getregset == TRIBOOL_TRUE)
     {
+#ifdef __KNC__
+      /* Fixed KNC layout; the x87 state stays with PTRACE_GETFPREGS.  */
+      int xsave_len = K1OM_XSTATE_SIZE;
+#else
       int xsave_len = x86_xsave_length ();
+#endif
 
       /* Use PTRACE_GETREGSET if it is available.  */
       for (regset_info *regset = x86_regsets;
@@ -911,7 +963,13 @@ x86_linux_read_description ()
 	  if (regset->get_request == PTRACE_GETREGSET)
 	    {
 	      if (regset->nt_type == NT_X86_XSTATE)
-		regset->size = xsave_len;
+		{
+		  regset->size = xsave_len;
+#ifdef __KNC__
+		  if (!x86_knc_vpu_regset_p (tid))
+		    regset->size = 0;
+#endif
+		}
 	      else if (regset->nt_type == NT_X86_SHSTK)
 		{
 		  /* We must configure the size of the NT_X86_SHSTK regset
@@ -921,13 +979,19 @@ x86_linux_read_description ()
 		     OPTIONAL_RUNTIME_REGS.  A ptrace call with NT_X86_SHSTK
 		     request may only be successful later on, once shadow
 		     stack is enabled for the current thread.  */
+#ifdef __KNC__
+		    regset->size = 0;
+#else
 		    regset->size = sizeof (CORE_ADDR);
+#endif
 		}
 	      else
 		gdb_assert_not_reached ("invalid regset type.");
 	    }
+#ifndef __KNC__
 	  else if (regset->type != GENERAL_REGS)
 	    regset->size = 0;
+#endif
 	}
     }
 

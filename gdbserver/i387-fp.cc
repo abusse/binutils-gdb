@@ -206,10 +206,16 @@ i387_cache_to_fxsave (struct regcache *regcache, void *buf)
   struct i387_fxsave *fp = (struct i387_fxsave *) buf;
   int i;
   int st0_regnum = find_regno (regcache->tdesc, "st0");
-  int xmm0_regnum = find_regno (regcache->tdesc, "xmm0");
   unsigned long val, val2;
+#ifdef __KNC__
+  /* Knights Corner: no SSE registers.  */
+  int xmm0_regnum = -1;
+  int num_xmm_registers = 0;
+#else
+  int xmm0_regnum = find_regno (regcache->tdesc, "xmm0");
   /* Amd64 has 16 xmm regs; I386 has 8 xmm regs.  */
   int num_xmm_registers = register_size (regcache->tdesc, 0) == 8 ? 16 : 8;
+#endif
 
   for (i = 0; i < 8; i++)
     collect_register (regcache, i + st0_regnum,
@@ -220,7 +226,9 @@ i387_cache_to_fxsave (struct regcache *regcache, void *buf)
 
   fp->fioff = regcache_raw_get_unsigned_by_name (regcache, "fioff");
   fp->fooff = regcache_raw_get_unsigned_by_name (regcache, "fooff");
+#ifndef __KNC__
   fp->mxcsr = regcache_raw_get_unsigned_by_name (regcache, "mxcsr");
+#endif
 
   /* This one's 11 bits... */
   val2 = regcache_raw_get_unsigned_by_name (regcache, "fop");
@@ -594,10 +602,16 @@ i387_fxsave_to_cache (struct regcache *regcache, const void *buf)
   struct i387_fxsave *fp = (struct i387_fxsave *) buf;
   int i, top;
   int st0_regnum = find_regno (regcache->tdesc, "st0");
-  int xmm0_regnum = find_regno (regcache->tdesc, "xmm0");
   unsigned long val;
+#ifdef __KNC__
+  /* Knights Corner: no SSE registers.  */
+  int xmm0_regnum = -1;
+  int num_xmm_registers = 0;
+#else
+  int xmm0_regnum = find_regno (regcache->tdesc, "xmm0");
   /* Amd64 has 16 xmm regs; I386 has 8 xmm regs.  */
   int num_xmm_registers = register_size (regcache->tdesc, 0) == 8 ? 16 : 8;
+#endif
 
   for (i = 0; i < 8; i++)
     supply_register (regcache, i + st0_regnum,
@@ -608,7 +622,9 @@ i387_fxsave_to_cache (struct regcache *regcache, const void *buf)
 
   supply_register_by_name (regcache, "fioff", &fp->fioff);
   supply_register_by_name (regcache, "fooff", &fp->fooff);
+#ifndef __KNC__
   supply_register_by_name (regcache, "mxcsr", &fp->mxcsr);
+#endif
 
   /* Some registers are 16-bit.  */
   val = fp->fctrl & 0xFFFF;
@@ -860,3 +876,41 @@ i387_get_xsave_storage ()
 {
   return { &x86_xstate_bv, &xsave_layout };
 }
+
+#ifdef __KNC__
+
+/* The k1om vector unit block follows the fxsave area and the xsave
+   header: zmm0-31, k0-7 (16 bits each), then vxcsr.  The tdesc numbers
+   k0-7, zmm0-31 and vxcsr consecutively.  */
+
+static int
+k1om_vpu_offset (int i)
+{
+  if (i < 8)
+    return 576 + 32 * 64 + 2 * i;
+  if (i < 40)
+    return 576 + 64 * (i - 8);
+  return 576 + 32 * 64 + 16;
+}
+
+void
+i387_cache_to_k1om_vpu (struct regcache *regcache, void *buf)
+{
+  int k0_regnum = find_regno (regcache->tdesc, "k0");
+
+  for (int i = 0; i < 41; i++)
+    collect_register (regcache, k0_regnum + i,
+		      (char *) buf + k1om_vpu_offset (i));
+}
+
+void
+i387_k1om_vpu_to_cache (struct regcache *regcache, const void *buf)
+{
+  int k0_regnum = find_regno (regcache->tdesc, "k0");
+
+  for (int i = 0; i < 41; i++)
+    supply_register (regcache, k0_regnum + i,
+		     (const char *) buf + k1om_vpu_offset (i));
+}
+
+#endif

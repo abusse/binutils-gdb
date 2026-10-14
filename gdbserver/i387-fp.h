@@ -28,6 +28,14 @@ void i387_cache_to_fxsave (struct regcache *regcache, void *buf);
 void i387_fxsave_to_cache (struct regcache *regcache, const void *buf);
 
 void i387_cache_to_xsave (struct regcache *regcache, void *buf);
+
+#ifdef __KNC__
+/* Size of the k1om NT_X86_XSTATE regset.  */
+#define K1OM_XSTATE_SIZE 2752
+
+void i387_cache_to_k1om_vpu (struct regcache *regcache, void *buf);
+void i387_k1om_vpu_to_cache (struct regcache *regcache, const void *buf);
+#endif
 void i387_xsave_to_cache (struct regcache *regcache, const void *buf);
 
 /* Set the XSAVE mask and fetch the XSAVE layout via CPUID.  */
