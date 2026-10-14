@@ -6491,6 +6491,10 @@ elf64_k1om_elf_object_p (bfd *abfd)
 #undef elf_backend_object_p
 #define elf_backend_object_p		    elf64_k1om_elf_object_p
 
+/* Not the Solaris 1MB page size of the vector above.  */
+#undef	ELF_MAXPAGESIZE
+#define ELF_MAXPAGESIZE			    0x1000
+
 /* Restore defaults.  */
 #undef ELF_TARGET_OS
 
