@@ -91,6 +91,14 @@ enum amd64_regnum
 
 #define AMD64_NUM_REGS		(AMD64_GSBASE_REGNUM + 1)
 
+/* Knights Corner (k1om): no SSE/AVX; the vector unit has 32 512-bit
+   registers, 8 16-bit masks and VXCSR.  Numbered after the GNU/Linux
+   orig_rax.  */
+#define K1OM_K0_REGNUM		(AMD64_GSBASE_REGNUM + 2)
+#define K1OM_ZMM0_REGNUM	(K1OM_K0_REGNUM + 8)
+#define K1OM_VXCSR_REGNUM	(K1OM_ZMM0_REGNUM + 32)
+#define K1OM_NUM_REGS		(K1OM_VXCSR_REGNUM + 1)
+
 extern displaced_step_copy_insn_closure_up amd64_displaced_step_copy_insn
   (struct gdbarch *gdbarch, CORE_ADDR from, CORE_ADDR to,
    struct regcache *regs);
@@ -100,6 +108,9 @@ extern void amd64_displaced_step_fixup
 
 /* Initialize the ABI for amd64.  Uses DEFAULT_TDESC as fallback
    tdesc, if INFO does not specify one.  */
+/* DWARF register mapping for k1om.  */
+extern int k1om_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg);
+
 extern void amd64_init_abi (struct gdbarch_info info,
 			    struct gdbarch *gdbarch,
 			    const target_desc *default_tdesc);

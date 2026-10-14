@@ -39,6 +39,7 @@
 #include "inferior.h"
 
 #include "amd64-tdep.h"
+#include "i387-tdep.h"
 #include "solib-svr4.h"
 #include "xml-syscall.h"
 #include "glibc-tdep.h"
@@ -2143,6 +2144,51 @@ amd64_linux_init_abi_common (struct gdbarch_info info, struct gdbarch *gdbarch,
   dwarf2_frame_set_init_reg (gdbarch, amd64_init_reg);
 }
 
+/* The k1om vector unit block of the NT_X86_XSTATE note; the x87 state
+   comes from .reg2.  */
+
+static void
+k1om_linux_supply_xstateregset (const struct regset *regset,
+				struct regcache *regcache, int regnum,
+				const void *xstateregs, size_t len)
+{
+  i387_supply_k1om_vpu (regcache, regnum, xstateregs);
+}
+
+static void
+k1om_linux_collect_xstateregset (const struct regset *regset,
+				 const struct regcache *regcache,
+				 int regnum, void *xstateregs, size_t len)
+{
+  i387_collect_k1om_vpu (regcache, regnum, xstateregs);
+}
+
+static const struct regset k1om_linux_xstateregset =
+  {
+    NULL,
+    k1om_linux_supply_xstateregset,
+    k1om_linux_collect_xstateregset
+  };
+
+static void
+k1om_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
+					 iterate_over_regset_sections_cb *cb,
+					 void *cb_data,
+					 const struct regcache *regcache)
+{
+  cb (".reg", 27 * 8, 27 * 8, &i386_gregset, NULL, cb_data);
+  cb (".reg2", 512, 512, &amd64_fpregset, NULL, cb_data);
+  cb (".reg-xstate", K1OM_XSTATE_SIZE, K1OM_XSTATE_SIZE,
+      &k1om_linux_xstateregset, "KNC vector state", cb_data);
+}
+
+static const struct target_desc *
+k1om_linux_core_read_description (struct gdbarch *gdbarch,
+				  struct target_ops *target, bfd *abfd)
+{
+  return k1om_linux_read_description ();
+}
+
 static void
 amd64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -2157,13 +2203,18 @@ amd64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->gregset_num_regs = ARRAY_SIZE (amd64_linux_gregset_reg_offset);
   tdep->sizeof_gregset = 27 * 8;
 
+  bool k1om = info.bfd_arch_info->arch == bfd_arch_k1om;
+  if (k1om)
+    tdep->k1om_k0_regnum = K1OM_K0_REGNUM;
+
   amd64_init_abi (info, gdbarch,
-		  amd64_linux_read_description (X86_XSTATE_SSE_MASK, false));
+		  k1om ? k1om_linux_read_description ()
+		  : amd64_linux_read_description (X86_XSTATE_SSE_MASK, false));
 
   const target_desc *tdesc = tdep->tdesc;
 
-  /* Reserve a number for orig_rax.  */
-  set_gdbarch_num_regs (gdbarch, AMD64_LINUX_NUM_REGS);
+  /* Reserve a number for orig_rax, and the k1om vector unit after it.  */
+  set_gdbarch_num_regs (gdbarch, k1om ? K1OM_NUM_REGS : AMD64_LINUX_NUM_REGS);
 
   feature = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.linux");
   if (feature == NULL)
@@ -2176,6 +2227,17 @@ amd64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
     return;
 
   amd64_linux_init_abi_common (info, gdbarch, 2);
+
+  if (k1om)
+    {
+      set_gdbarch_dwarf2_reg_to_regnum (gdbarch, k1om_dwarf_reg_to_regnum);
+      set_gdbarch_stab_reg_to_regnum (gdbarch, k1om_dwarf_reg_to_regnum);
+      set_gdbarch_core_read_x86_xsave_layout (gdbarch, nullptr);
+      set_gdbarch_iterate_over_regset_sections
+	(gdbarch, k1om_linux_iterate_over_regset_sections);
+      set_gdbarch_core_read_description (gdbarch,
+					 k1om_linux_core_read_description);
+    }
 
   /* Initialize the amd64_linux_record_tdep.  */
   /* These values are the size of the type that will be used in a system
@@ -2569,4 +2631,6 @@ INIT_GDB_FILE (amd64_linux_tdep)
 			  GDB_OSABI_LINUX, amd64_linux_init_abi);
   gdbarch_register_osabi (bfd_arch_i386, bfd_mach_x64_32,
 			  GDB_OSABI_LINUX, amd64_x32_linux_init_abi);
+  gdbarch_register_osabi (bfd_arch_k1om, bfd_mach_k1om,
+			  GDB_OSABI_LINUX, amd64_linux_init_abi);
 }

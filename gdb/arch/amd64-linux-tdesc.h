@@ -28,4 +28,8 @@ struct target_desc;
 extern const target_desc *amd64_linux_read_description
   (uint64_t xstate_bv, bool is_x32);
 
+/* Return the target description for GNU/Linux on k1om (Knights Corner).  */
+
+extern const target_desc *k1om_linux_read_description ();
+
 #endif /* GDB_ARCH_AMD64_LINUX_TDESC_H */

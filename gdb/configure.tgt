@@ -109,7 +109,7 @@ riscv*-*-*)
 	cpu_obs="riscv-tdep.o riscv-none-tdep.o arch/riscv.o \
 	         ravenscar-thread.o riscv-ravenscar-thread.o";;
 
-x86_64-*-*)
+x86_64-*-* | k1om-*-*)
 	cpu_obs="${i386_tobjs} ${amd64_tobjs}";;
 
 xtensa*)
@@ -719,8 +719,8 @@ x86_64-*-dicos*)
 x86_64-*-elf*)
 	gdb_target_obs="${i386_tobjs}"
 	;;
-x86_64-*-linux*)
-	# Target: GNU/Linux x86-64
+x86_64-*-linux* | k1om-*-linux*)
+	# Target: GNU/Linux x86-64, Xeon Phi Knights Corner
 	gdb_target_obs="amd64-linux-tdep.o ${i386_tobjs}  \
 			i386-linux-tdep.o glibc-tdep.o svr4-tls-tdep.o \
 			solib-svr4.o solib-svr4-linux.o symfile-mem.o \

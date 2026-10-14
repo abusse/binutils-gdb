@@ -4336,6 +4336,12 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   if (i386_byte_regnum_p (gdbarch, regnum))
     return 0;
 
+  if (tdep->k1om_k0_regnum >= 0
+      && regnum >= tdep->k1om_k0_regnum
+      && regnum < tdep->k1om_k0_regnum + 41)
+    return (group == vector_reggroup || group == all_reggroup
+	    || group == save_reggroup || group == restore_reggroup);
+
   if (i386_word_regnum_p (gdbarch, regnum))
     return 0;
 
@@ -8628,6 +8634,30 @@ i386_validate_tdesc_p (i386_gdbarch_tdep *tdep,
 
   valid_p = 1;
 
+  /* Knights Corner vector unit.  */
+  const tdesc_feature *feature_k1om
+    = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.k1om");
+  if (feature_k1om != nullptr)
+    {
+      static const char *const k1om_names[] = {
+	"k0", "k1", "k2", "k3", "k4", "k5", "k6", "k7",
+	"zmm0", "zmm1", "zmm2", "zmm3", "zmm4", "zmm5", "zmm6", "zmm7",
+	"zmm8", "zmm9", "zmm10", "zmm11", "zmm12", "zmm13", "zmm14", "zmm15",
+	"zmm16", "zmm17", "zmm18", "zmm19", "zmm20", "zmm21", "zmm22", "zmm23",
+	"zmm24", "zmm25", "zmm26", "zmm27", "zmm28", "zmm29", "zmm30", "zmm31",
+	"vxcsr"
+      };
+
+      if (tdep->k1om_k0_regnum < 0 || feature_sse != nullptr)
+	return 0;
+      for (i = 0; i < ARRAY_SIZE (k1om_names); i++)
+	valid_p &= tdesc_numbered_register (feature_k1om, tdesc_data,
+					    tdep->k1om_k0_regnum + i,
+					    k1om_names[i]);
+    }
+  else
+    tdep->k1om_k0_regnum = -1;
+
   /* The XCR0 bits.  */
   if (feature_avx512)
     {
@@ -9152,6 +9182,7 @@ i386_target_description (uint64_t xstate_bv, bool segments)
 INIT_GDB_FILE (i386_tdep)
 {
   gdbarch_register (bfd_arch_i386, i386_gdbarch_init);
+  gdbarch_register (bfd_arch_k1om, i386_gdbarch_init);
 
   /* Add the variable that controls the disassembly flavor.  */
   add_setshow_enum_cmd ("disassembly-flavor", no_class, valid_flavors,

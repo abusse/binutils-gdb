@@ -94,6 +94,10 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
      is supported.  */
   int k0_regnum = -1;
 
+  /* Register number of k0 of the k1om (Knights Corner) vector unit, or
+     -1 if this is not k1om.  zmm0-31 and vxcsr follow.  */
+  int k1om_k0_regnum = -1;
+
   /* Number of pseudo ZMM registers ($zmm0-$zmm31).  */
   int num_zmm_regs = 0;
 

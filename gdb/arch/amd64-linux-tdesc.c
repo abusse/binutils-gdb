@@ -65,3 +65,18 @@ amd64_linux_read_description (uint64_t xstate_bv, bool is_x32)
   tdesc_cache.emplace (xstate_bv, std::move (tdesc));
   return ptr;
 }
+
+/* See arch/amd64-linux-tdesc.h.  */
+
+const struct target_desc *
+k1om_linux_read_description ()
+{
+  static target_desc *tdesc;
+
+  if (tdesc == nullptr)
+    {
+      tdesc = k1om_create_target_description (true);
+      x86_linux_post_init_tdesc (tdesc, true);
+    }
+  return tdesc;
+}

@@ -596,7 +596,7 @@ i387_supply_fxsave (struct regcache *regcache, int regnum, const void *fxsave)
   int i;
 
   gdb_assert (tdep->st0_regnum >= I386_ST0_REGNUM);
-  gdb_assert (tdep->num_xmm_regs > 0);
+  gdb_assert (tdep->num_xmm_regs > 0 || tdep->k1om_k0_regnum >= 0);
 
   for (i = I387_ST0_REGNUM (tdep); i < I387_MXCSR_REGNUM (tdep); i++)
     if (regnum == -1 || regnum == i)
@@ -656,7 +656,8 @@ i387_supply_fxsave (struct regcache *regcache, int regnum, const void *fxsave)
 	  regcache->raw_supply (i, FXSAVE_ADDR (tdep, regs, i));
       }
 
-  if (regnum == I387_MXCSR_REGNUM (tdep) || regnum == -1)
+  if (tdep->num_xmm_regs > 0
+      && (regnum == I387_MXCSR_REGNUM (tdep) || regnum == -1))
     {
       if (regs == NULL)
 	regcache->raw_supply (I387_MXCSR_REGNUM (tdep), NULL);
@@ -680,7 +681,7 @@ i387_collect_fxsave (const struct regcache *regcache, int regnum, void *fxsave)
   int i;
 
   gdb_assert (tdep->st0_regnum >= I386_ST0_REGNUM);
-  gdb_assert (tdep->num_xmm_regs > 0);
+  gdb_assert (tdep->num_xmm_regs > 0 || tdep->k1om_k0_regnum >= 0);
 
   for (i = I387_ST0_REGNUM (tdep); i < I387_MXCSR_REGNUM (tdep); i++)
     if (regnum == -1 || regnum == i)
@@ -726,7 +727,8 @@ i387_collect_fxsave (const struct regcache *regcache, int regnum, void *fxsave)
 	  regcache->raw_collect (i, FXSAVE_ADDR (tdep, regs, i));
       }
 
-  if (regnum == I387_MXCSR_REGNUM (tdep) || regnum == -1)
+  if (tdep->num_xmm_regs > 0
+      && (regnum == I387_MXCSR_REGNUM (tdep) || regnum == -1))
     regcache->raw_collect (I387_MXCSR_REGNUM (tdep),
 			  FXSAVE_MXCSR_ADDR (regs));
 }
@@ -1011,6 +1013,63 @@ i387_xsave_get_clear_bv (struct gdbarch *gdbarch, const void *xsave)
   ULONGEST clear_bv = (~(xstate_bv)) & tdep->xcr0;
 
   return clear_bv;
+}
+
+/* The k1om vector unit block follows the fxsave area and the 64-byte
+   xsave header: zmm0-31, k0-7 (16 bits each), then vxcsr.  */
+
+#define K1OM_VPU_OFFSET 576
+
+static int
+k1om_vpu_offset (int i)
+{
+  if (i < 8)
+    return K1OM_VPU_OFFSET + 32 * 64 + 2 * i;
+  if (i < 40)
+    return K1OM_VPU_OFFSET + 64 * (i - 8);
+  return K1OM_VPU_OFFSET + 32 * 64 + 16;
+}
+
+/* See i387-tdep.h.  */
+
+void
+i387_supply_k1om_vpu (struct regcache *regcache, int regnum,
+		      const void *xsave)
+{
+  i386_gdbarch_tdep *tdep
+    = gdbarch_tdep<i386_gdbarch_tdep> (regcache->arch ());
+  const gdb_byte *regs = (const gdb_byte *) xsave;
+
+  gdb_assert (tdep->k1om_k0_regnum >= 0);
+  for (int i = 0; i < 41; i++)
+    {
+      int r = tdep->k1om_k0_regnum + i;
+
+      if (regnum != -1 && regnum != r)
+	continue;
+      regcache->raw_supply (r, regs == NULL ? NULL
+			       : regs + k1om_vpu_offset (i));
+    }
+}
+
+/* See i387-tdep.h.  */
+
+void
+i387_collect_k1om_vpu (const struct regcache *regcache, int regnum,
+		       void *xsave)
+{
+  i386_gdbarch_tdep *tdep
+    = gdbarch_tdep<i386_gdbarch_tdep> (regcache->arch ());
+  gdb_byte *regs = (gdb_byte *) xsave;
+
+  gdb_assert (tdep->k1om_k0_regnum >= 0);
+  for (int i = 0; i < 41; i++)
+    {
+      int r = tdep->k1om_k0_regnum + i;
+
+      if (regnum == -1 || regnum == r)
+	regcache->raw_collect (r, regs + k1om_vpu_offset (i));
+    }
 }
 
 /* Similar to i387_supply_fxsave, but use XSAVE extended state.  */

@@ -30,4 +30,9 @@ target_desc *amd64_create_target_description (uint64_t xstate_bv,
 					      bool is_x32, bool is_linux,
 					      bool segments);
 
+/* Create a target description for k1om (Intel Xeon Phi Knights Corner):
+   the amd64 core registers and the KNC vector unit, without SSE.  */
+
+target_desc *k1om_create_target_description (bool is_linux);
+
 #endif /* GDB_ARCH_AMD64_H */

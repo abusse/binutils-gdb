@@ -23,6 +23,7 @@
 #include "../features/i386/64bit-avx.c"
 #include "../features/i386/64bit-avx512.c"
 #include "../features/i386/64bit-core.c"
+#include "../features/i386/64bit-k1om.c"
 #include "../features/i386/64bit-linux.c"
 #include "../features/i386/64bit-segments.c"
 #include "../features/i386/64bit-sse.c"
@@ -76,6 +77,35 @@ amd64_create_target_description (uint64_t xstate_bv, bool is_x32,
 	regnum = create_feature_i386_64bit_ssp (tdesc.get (), regnum);
       else
 	regnum = create_feature_i386_32bit_ssp (tdesc.get (), regnum);
+    }
+
+  return tdesc.release ();
+}
+
+/* See arch/amd64.h.  */
+
+target_desc *
+k1om_create_target_description (bool is_linux)
+{
+  target_desc_up tdesc = allocate_target_description ();
+
+#ifndef IN_PROCESS_AGENT
+  set_tdesc_architecture (tdesc.get (), "k1om");
+
+  if (is_linux)
+    set_tdesc_osabi (tdesc.get (), GDB_OSABI_LINUX);
+#endif
+
+  long regnum = 0;
+
+  regnum = create_feature_i386_64bit_core (tdesc.get (), regnum);
+  regnum = create_feature_i386_64bit_k1om (tdesc.get (), regnum);
+  regnum = create_feature_i386_64bit_segments (tdesc.get (), regnum);
+  if (is_linux)
+    {
+      tdesc_feature *feature
+	= tdesc_create_feature (tdesc.get (), "org.gnu.gdb.i386.linux");
+      tdesc_create_reg (feature, "orig_rax", regnum++, 1, NULL, 64, "int");
     }
 
   return tdesc.release ();

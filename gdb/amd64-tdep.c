@@ -757,6 +757,7 @@ amd64_return_value (struct gdbarch *gdbarch, struct value *function,
   int len = type->length ();
   static int integer_regnum[] = { AMD64_RAX_REGNUM, AMD64_RDX_REGNUM };
   static int sse_regnum[] = { AMD64_XMM0_REGNUM, AMD64_XMM1_REGNUM };
+  i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
   int integer_reg = 0;
   int sse_reg = 0;
   int i;
@@ -840,14 +841,17 @@ amd64_return_value (struct gdbarch *gdbarch, struct value *function,
 	case AMD64_SSE:
 	  /* 4. If the class is SSE, the next available SSE register
 	     of the sequence %xmm0, %xmm1 is used.  */
-	  regnum = sse_regnum[sse_reg++];
+	  regnum = (tdep->k1om_k0_regnum >= 0
+		    ? K1OM_ZMM0_REGNUM + sse_reg : sse_regnum[sse_reg]);
+	  sse_reg++;
 	  break;
 
 	case AMD64_SSEUP:
 	  /* 5. If the class is SSEUP, the eightbyte is passed in the
 	     upper half of the last used SSE register.  */
 	  gdb_assert (sse_reg > 0);
-	  regnum = sse_regnum[sse_reg - 1];
+	  regnum = (tdep->k1om_k0_regnum >= 0
+		    ? K1OM_ZMM0_REGNUM + sse_reg - 1 : sse_regnum[sse_reg - 1]);
 	  offset = 8;
 	  break;
 
@@ -877,9 +881,10 @@ amd64_return_value (struct gdbarch *gdbarch, struct value *function,
 
       gdb_assert (regnum != -1);
 
-      if (readbuf)
-	regcache->raw_read_part (regnum, offset, std::min (len, 8),
-				 readbuf + i * 8);
+      if (readbuf
+	  && regcache->raw_read_part (regnum, offset, std::min (len, 8),
+				      readbuf + i * 8) == REG_UNAVAILABLE)
+	(*read_value)->mark_bytes_unavailable (i * 8, std::min (len, 8));
       if (writebuf)
 	regcache->raw_write_part (regnum, offset, std::min (len, 8),
 				  writebuf + i * 8);
@@ -911,6 +916,8 @@ amd64_push_arguments (struct regcache *regcache, int nargs, struct value **args,
     AMD64_XMM0_REGNUM + 6, AMD64_XMM0_REGNUM + 7,
   };
   struct value **stack_args = XALLOCAVEC (struct value *, nargs);
+  i386_gdbarch_tdep *tdep
+    = gdbarch_tdep<i386_gdbarch_tdep> (regcache->arch ());
   int num_stack_args = 0;
   int num_elements = 0;
   int element = 0;
@@ -974,12 +981,16 @@ if (return_method == return_method_struct)
 		  break;
 
 		case AMD64_SSE:
-		  regnum = sse_regnum[sse_reg++];
+		  regnum = (tdep->k1om_k0_regnum >= 0
+			    ? K1OM_ZMM0_REGNUM + sse_reg : sse_regnum[sse_reg]);
+		  sse_reg++;
 		  break;
 
 		case AMD64_SSEUP:
 		  gdb_assert (sse_reg > 0);
-		  regnum = sse_regnum[sse_reg - 1];
+		  regnum = (tdep->k1om_k0_regnum >= 0
+			    ? K1OM_ZMM0_REGNUM + sse_reg - 1
+			    : sse_regnum[sse_reg - 1]);
 		  offset = 8;
 		  break;
 
@@ -991,6 +1002,10 @@ if (return_method == return_method_struct)
 		}
 
 	      gdb_assert (regnum != -1);
+	      if (regcache->get_register_status (regnum) == REG_UNAVAILABLE)
+		error (_("Cannot pass the argument in register %s: its value "
+			 "is not available."),
+		       gdbarch_register_name (regcache->arch (), regnum));
 	      memset (buf, 0, sizeof buf);
 	      memcpy (buf, valbuf + j * 8, std::min (len, 8));
 	      regcache->raw_write_part (regnum, offset, 8, buf);
@@ -3470,6 +3485,25 @@ amd64_get_longjmp_target (const frame_info_ptr &frame, CORE_ADDR *pc)
   *pc = extract_typed_address (buf, builtin_type (gdbarch)->builtin_func_ptr);
 
   return 1;
+}
+
+/* Convert a DWARF register number of the k1om GCC (zmm0-15 and zmm16-31
+   in the xmm slots, k0-7 at 118, vxcsr at 126) to a GDB register number.  */
+
+int
+k1om_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+{
+  if (reg >= 17 && reg <= 32)
+    return K1OM_ZMM0_REGNUM + reg - 17;
+  if (reg >= 67 && reg <= 82)
+    return K1OM_ZMM0_REGNUM + 16 + reg - 67;
+  if (reg >= 118 && reg <= 125)
+    return K1OM_K0_REGNUM + reg - 118;
+  if (reg == 126)
+    return K1OM_VXCSR_REGNUM;
+  if (reg == 64)
+    return -1;
+  return amd64_dwarf_reg_to_regnum (gdbarch, reg);
 }
 
 static const int amd64_record_regmap[] =

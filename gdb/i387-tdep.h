@@ -146,6 +146,27 @@ extern x86_xsave_layout i387_fallback_xsave_layout (uint64_t xcr0);
 
 /* Similar to i387_supply_fxsave, but use XSAVE extended state.  */
 
+/* Size of the k1om (Knights Corner) NT_X86_XSTATE regset: fxsave area,
+   xsave header and the vector unit block.  */
+#define K1OM_XSTATE_SIZE 2752
+
+/* Whether the k1om xstate buffer XSAVE holds the vector unit state.
+   VXCSR.DUE is always set on the hardware; kernels whose NT_X86_XSTATE
+   does not export the vector unit return zeros there (and must not be
+   written to with PTRACE_SETREGSET).  */
+#define K1OM_XSTATE_VPU_VALID_P(xsave) \
+  ((((const unsigned char *) (xsave))[576 + 32 * 64 + 16 + 2] & 0x20) != 0)
+
+/* Fill register REGNUM (or all k1om vector unit registers if -1) in
+   REGCACHE from the k1om xstate buffer XSAVE.  */
+extern void i387_supply_k1om_vpu (struct regcache *regcache, int regnum,
+				  const void *xsave);
+
+/* Store register REGNUM (or all if -1) from REGCACHE into the k1om
+   xstate buffer XSAVE.  */
+extern void i387_collect_k1om_vpu (const struct regcache *regcache,
+				   int regnum, void *xsave);
+
 extern void i387_supply_xsave (struct regcache *regcache, int regnum,
 			       const void *xsave);
 
