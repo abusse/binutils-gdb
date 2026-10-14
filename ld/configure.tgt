@@ -943,11 +943,11 @@ x86_64-*-haiku*)	targ_emul=elf_x86_64_haiku
 			targ_extra_emuls="elf_x86_64 elf_i386_haiku"
 			;;
 x86_64-*-linux-gnux32)	targ_emul=elf32_x86_64
-			targ_extra_libpath="elf_i386 elf_x86_64"
+			targ_extra_libpath="elf_i386 elf_x86_64 elf_k1om"
 			tdir_elf_i386=`echo ${targ_alias} | sed -e 's/x86_64/i386/' -e 's/-linux-gnux32/-linux-gnu/'`
 			;;
 x86_64-*-linux-*)	targ_emul=elf_x86_64
-			targ_extra_libpath="elf_i386 elf32_x86_64"
+			targ_extra_libpath="elf_i386 elf32_x86_64 elf_k1om"
 			tdir_elf_i386=`echo ${targ_alias} | sed -e 's/x86_64/i386/'`
 			;;
 x86_64-*-redox*)	targ_emul=elf_x86_64
@@ -960,17 +960,17 @@ x86_64-*-solaris2*)
 			;;
 x86_64-*-netbsd* | x86_64-*-openbsd*)
 			targ_emul=elf_x86_64
-			targ_extra_emuls="elf_i386"
+			targ_extra_emuls="elf_i386 elf_k1om"
 			tdir_elf_i386=`echo ${targ_alias} | \
 			    sed -e 's/x86_64/i386/' -e 's/aout//'`
 			;;
 x86_64-*-elf* | x86_64-*-rtems* | x86_64-*-fuchsia* | x86_64-*-genode*)
 			targ_emul=elf_x86_64
-			targ_extra_libpath="elf_i386 elf32_x86_64"
+			targ_extra_libpath="elf_i386 elf32_x86_64 elf_k1om"
 			tdir_elf_i386=`echo ${targ_alias} | sed -e 's/x86_64/i386/'`
 			;;
 x86_64-*-dragonfly*)	targ_emul=elf_x86_64
-			targ_extra_emuls="elf_i386"
+			targ_extra_emuls="elf_i386 elf_k1om"
 			;;
 x86_64-*-freebsd* | x86_64-*-kfreebsd*-gnu)
 			targ_emul=elf_x86_64_fbsd

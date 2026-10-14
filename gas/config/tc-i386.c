@@ -1083,6 +1083,7 @@ static const arch_entry cpu_arch[] =
   ARCH (merom, CORE2, CORE2, true),
   ARCH (core2, CORE2, CORE2, false),
   ARCH (corei7, COREI7, COREI7, false),
+  ARCH (k1om, K1OM, UNKNOWN, false),
   ARCH (iamcu, IAMCU, IAMCU, false),
   ARCH (k6, K6, K6, false),
   ARCH (k6_2, K6, K6_2, false),
@@ -1662,6 +1663,7 @@ i386_generate_nops (fragS *fragP, char *where, offsetT count, int limit)
 	    case PROCESSOR_PENTIUMPRO:
 	    case PROCESSOR_PENTIUM4:
 	    case PROCESSOR_NOCONA:
+	    case PROCESSOR_K1OM:
 	    case PROCESSOR_GENERIC64:
 	    case PROCESSOR_K6:
 	    case PROCESSOR_ATHLON:
@@ -3281,9 +3283,11 @@ check_cpu_arch_compatible (const char *name ATTRIBUTE_UNUSED,
 	arch = default_arch;
     }
 
-  /* If we are targeting Intel MCU, we must enable it.  */
+  /* If we are targeting Intel MCU or K1OM, we must enable it.  */
   if ((get_elf_backend_data (stdoutput)->elf_machine_code == EM_IAMCU)
-      == new_flag.bitfield.cpuiamcu)
+      == new_flag.bitfield.cpuiamcu
+      && (get_elf_backend_data (stdoutput)->elf_machine_code != EM_K1OM
+	  || new_flag.bitfield.cpuk1om))
     return;
 
   as_bad (_("`%s' is not supported on `%s'"), name, arch);
@@ -3591,7 +3595,14 @@ set_cpu_arch (int dummy ATTRIBUTE_UNUSED)
 enum bfd_architecture
 i386_arch (void)
 {
-  if (cpu_arch_isa == PROCESSOR_IAMCU)
+  if (cpu_arch_isa == PROCESSOR_K1OM)
+    {
+      if (OUTPUT_FLAVOR != bfd_target_elf_flavour
+	  || flag_code != CODE_64BIT)
+	as_fatal (_("Intel K1OM is 64bit ELF only"));
+      return bfd_arch_k1om;
+    }
+  else if (cpu_arch_isa == PROCESSOR_IAMCU)
     {
       if (!IS_ELF || flag_code == CODE_64BIT)
 	as_fatal (_("Intel MCU is 32bit ELF only"));
@@ -3606,7 +3617,14 @@ i386_mach (void)
 {
   if (startswith (default_arch, "x86_64"))
     {
-      if (default_arch[6] == '\0')
+      if (cpu_arch_isa == PROCESSOR_K1OM)
+	{
+	  if (OUTPUT_FLAVOR != bfd_target_elf_flavour
+	      || default_arch[6] != '\0')
+	    as_fatal (_("Intel K1OM is 64bit ELF only"));
+	  return bfd_mach_k1om;
+	}
+      else if (default_arch[6] == '\0')
 	return bfd_mach_x86_64;
       else
 	return bfd_mach_x64_32;
@@ -18271,7 +18289,13 @@ i386_target_format (void)
 	    format = ELF_TARGET_FORMAT32;
 	    break;
 	  }
-	if (cpu_arch_isa == PROCESSOR_IAMCU)
+	if (cpu_arch_isa == PROCESSOR_K1OM)
+	  {
+	    if (x86_elf_abi != X86_64_ABI)
+	      as_fatal (_("Intel K1OM is 64bit only"));
+	    return ELF_TARGET_K1OM_FORMAT;
+	  }
+	else if (cpu_arch_isa == PROCESSOR_IAMCU)
 	  {
 	    if (x86_elf_abi != I386_ABI)
 	      as_fatal (_("Intel MCU is 32bit only"));

@@ -211,6 +211,7 @@ disassembler (enum bfd_architecture a,
 #ifdef ARCH_i386
     case bfd_arch_i386:
     case bfd_arch_iamcu:
+    case bfd_arch_k1om:
       disassemble = print_insn_i386;
       break;
 #endif

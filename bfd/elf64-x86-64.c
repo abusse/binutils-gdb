@@ -6495,6 +6495,66 @@ elf_x86_64_solaris2_add_symbol_hook (bfd *abfd,
 #undef	elf_backend_add_symbol_hook
 #define elf_backend_add_symbol_hook	elf_x86_64_add_symbol_hook
 
+/* Intel K1OM support.  */
+
+static bool
+elf64_k1om_elf_object_p (bfd *abfd)
+{
+  /* Set the right machine number for an K1OM elf64 file.  */
+  bfd_default_set_arch_mach (abfd, bfd_arch_k1om, bfd_mach_k1om);
+  return true;
+}
+
+#undef  TARGET_LITTLE_SYM
+#define TARGET_LITTLE_SYM		    k1om_elf64_vec
+#undef  TARGET_LITTLE_NAME
+#define TARGET_LITTLE_NAME		    "elf64-k1om"
+#undef ELF_ARCH
+#define ELF_ARCH			    bfd_arch_k1om
+
+#undef	ELF_MACHINE_CODE
+#define ELF_MACHINE_CODE		    EM_K1OM
+
+#undef	ELF_OSABI
+#define	ELF_OSABI			    ELFOSABI_GNU
+#undef	ELF_OSABI_EXACT
+
+#undef  elf64_bed
+#define elf64_bed elf64_k1om_bed
+
+#undef elf_backend_object_p
+#define elf_backend_object_p		    elf64_k1om_elf_object_p
+
+/* Not the Solaris 1MB page size of the vector above.  */
+#undef	ELF_MAXPAGESIZE
+#define ELF_MAXPAGESIZE			    0x1000
+
+/* Restore defaults.  */
+#undef ELF_TARGET_OS
+
+#include "elf64-target.h"
+
+/* FreeBSD K1OM support.  */
+
+#undef  TARGET_LITTLE_SYM
+#define TARGET_LITTLE_SYM		    k1om_elf64_fbsd_vec
+#undef  TARGET_LITTLE_NAME
+#define TARGET_LITTLE_NAME		    "elf64-k1om-freebsd"
+
+#undef	ELF_OSABI
+#define	ELF_OSABI			    ELFOSABI_FREEBSD
+#undef	ELF_OSABI_EXACT
+#define	ELF_OSABI_EXACT			    1
+
+#undef  elf64_bed
+#define elf64_bed elf64_k1om_fbsd_bed
+
+#include "elf64-target.h"
+
+/* Restore defaults.  */
+#undef	ELF_MACHINE_CODE
+#define ELF_MACHINE_CODE		    EM_X86_64
+
 /* 32bit x86-64 support.  */
 
 #undef  TARGET_LITTLE_SYM

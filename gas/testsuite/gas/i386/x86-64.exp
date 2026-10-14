@@ -719,6 +719,7 @@ if [is_elf_format] then {
 	run_dump_test "x86-64-opcode-inval-intel"
     }
     run_dump_test "intel-got64"
+    run_dump_test "k1om"
     run_dump_test "x86-64-localpic"
     run_dump_test "debug1"
     run_dump_test "x86-64-mpx-branch-1"

@@ -367,6 +367,7 @@ static bitfield cpu_flags[] =
   BITFIELD (AVX512VL),
   BITFIELD (AVX512DQ),
   BITFIELD (AVX512BW),
+  BITFIELD (K1OM),
   BITFIELD (IAMCU),
   BITFIELD (SSE4a),
   BITFIELD (3dnow),
