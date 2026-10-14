@@ -46,6 +46,23 @@ const target_desc *
 x86_linux_tdesc_for_tid (int tid, uint64_t *xstate_bv_storage,
 			 x86_xsave_layout *xsave_layout_storage)
 {
+#ifdef __KNC__
+  /* Knights Corner has no XSAVE; NT_X86_XSTATE carries the fxsave area
+     and the vector unit in a fixed layout.  */
+  if (have_ptrace_getregset == TRIBOOL_UNKNOWN)
+    {
+      uint64_t xstateregs[X86_XSTATE_SSE_SIZE / sizeof (uint64_t)];
+      struct iovec iov = { xstateregs, sizeof (xstateregs) };
+
+      have_ptrace_getregset
+	= (ptrace (PTRACE_GETREGSET, tid, (unsigned int) NT_X86_XSTATE,
+		   &iov) < 0
+	   ? TRIBOOL_FALSE : TRIBOOL_TRUE);
+    }
+  *xstate_bv_storage = X86_XSTATE_X87_MASK;
+  return k1om_linux_read_description ();
+#endif
+
 #ifdef __x86_64__
   x86_linux_arch_size arch_size = x86_linux_ptrace_get_arch_size (tid);
   bool is_64bit = arch_size.is_64bit ();

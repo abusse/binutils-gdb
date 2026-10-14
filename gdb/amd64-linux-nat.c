@@ -30,6 +30,7 @@
 
 #include "amd64-nat.h"
 #include "amd64-tdep.h"
+#include "i387-tdep.h"
 #include "amd64-linux-tdep.h"
 #include "i386-linux-tdep.h"
 #include "x86-tdep.h"
@@ -232,6 +233,26 @@ amd64_linux_nat_target::fetch_registers (struct regcache *regcache, int regnum)
 	return;
     }
 
+  if (tdep->k1om_k0_regnum >= 0
+      && (regnum == -1 || !amd64_native_gregset_supplies_p (gdbarch, regnum)))
+    {
+      elf_fpregset_t fpregs;
+      gdb_byte xstateregs[K1OM_XSTATE_SIZE] = {};
+      struct iovec iov = { xstateregs, sizeof (xstateregs) };
+
+      if (ptrace (PTRACE_GETFPREGS, tid, 0, (long) &fpregs) < 0)
+	perror_with_name (_("Couldn't get floating point status"));
+      amd64_supply_fxsave (regcache, -1, &fpregs);
+
+      if (ptrace (PTRACE_GETREGSET, tid, (unsigned int) NT_X86_XSTATE,
+		  (long) &iov) < 0)
+	perror_with_name (_("Couldn't get vector unit state"));
+      i387_supply_k1om_vpu (regcache, -1,
+			    K1OM_XSTATE_VPU_VALID_P (xstateregs)
+			    ? xstateregs : NULL);
+      return;
+    }
+
   if (regnum == -1 || !amd64_native_gregset_supplies_p (gdbarch, regnum))
     {
       elf_fpregset_t fpregs;
@@ -302,6 +323,42 @@ amd64_linux_nat_target::store_registers (struct regcache *regcache, int regnum)
 
       if (regnum != -1)
 	return;
+    }
+
+  if (tdep->k1om_k0_regnum >= 0
+      && (regnum == -1 || !amd64_native_gregset_supplies_p (gdbarch, regnum)))
+    {
+      if (regnum == -1 || regnum < tdep->k1om_k0_regnum)
+	{
+	  elf_fpregset_t fpregs;
+
+	  if (ptrace (PTRACE_GETFPREGS, tid, 0, (long) &fpregs) < 0)
+	    perror_with_name (_("Couldn't get floating point status"));
+	  amd64_collect_fxsave (regcache, regnum, &fpregs);
+	  if (ptrace (PTRACE_SETFPREGS, tid, 0, (long) &fpregs) < 0)
+	    perror_with_name (_("Couldn't write floating point status"));
+	}
+      if (regnum == -1 || regnum >= tdep->k1om_k0_regnum)
+	{
+	  gdb_byte xstateregs[K1OM_XSTATE_SIZE] = {};
+	  struct iovec iov = { xstateregs, sizeof (xstateregs) };
+
+	  if (ptrace (PTRACE_GETREGSET, tid, (unsigned int) NT_X86_XSTATE,
+		      (long) &iov) < 0)
+	    perror_with_name (_("Couldn't get vector unit state"));
+	  if (!K1OM_XSTATE_VPU_VALID_P (xstateregs))
+	    {
+	      if (regnum != -1)
+		error (_("The kernel does not support writing the vector "
+			 "unit registers."));
+	      return;
+	    }
+	  i387_collect_k1om_vpu (regcache, regnum, xstateregs);
+	  if (ptrace (PTRACE_SETREGSET, tid, (unsigned int) NT_X86_XSTATE,
+		      (long) &iov) < 0)
+	    perror_with_name (_("Couldn't write vector unit state"));
+	}
+      return;
     }
 
   if (regnum == -1 || !amd64_native_gregset_supplies_p (gdbarch, regnum))
